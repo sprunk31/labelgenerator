@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import os
 from docx import Document
 from docx.shared import Cm, Pt
 from pystrich.code128 import Code128Encoder
