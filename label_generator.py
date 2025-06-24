@@ -109,11 +109,17 @@ st.title("📦 Containerlabelgenerator")
 st.write("Upload een Excel-bestand om labels te genereren met barcodes.")
 
 st.markdown("### 📄 Vereiste Excel structuur")
-st.markdown("""
-| straat      | huisnummer | toevoeging | postcode | woonplaats | containertype              |
-|-------------|------------|------------|----------|------------|----------------------------|
-| Teststraat  | 9          | A          | 1234 AA  | Rijswijk   | 140 liter blauwe container |
-""")
+
+voorbeeld_df = pd.DataFrame([{
+    "straat": "Teststraat",
+    "huisnummer": 9,
+    "toevoeging": "A",
+    "postcode": "1234 AA",
+    "woonplaats": "Rijswijk",
+    "containertype": "140 liter blauwe container"
+}])
+
+st.dataframe(voorbeeld_df, use_container_width=True, hide_index=True)
 
 uploaded_file = st.file_uploader("Sleep je `.xlsx` bestand hiernaartoe", type=["xlsx"])
 
