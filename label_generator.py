@@ -72,6 +72,7 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
             run.font.name = 'Arial'
             run.bold = True
         p_title.style.font.size = Pt(14)
+        p_title.paragraph_format.space_after = Pt(0)
 
         p_img = output_doc.add_paragraph()
         run_img = p_img.add_run()
