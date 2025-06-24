@@ -118,8 +118,8 @@ st.markdown("""
 uploaded_file = st.file_uploader("Sleep je `.xlsx` bestand hiernaartoe", type=["xlsx"])
 
 if uploaded_file:
-    barcode_width = st.slider("Barcode breedte (cm)", 2.0, 6.0, 3.0, 0.1)
-    barcode_height = st.slider("Barcode hoogte (cm)", 0.5, 3.0, 1.5, 0.1)
+    barcode_width = 3.0
+    barcode_height = 1.5
 
     if st.button("Verwerken"):
         with st.spinner("Bezig met verwerken..."):
