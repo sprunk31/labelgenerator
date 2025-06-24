@@ -80,6 +80,8 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
             run_img.add_picture(barcode_buf, width=Cm(barcode_width_cm), height=Cm(barcode_height_cm))
         else:
             run_img.add_picture(barcode_buf, width=Cm(barcode_width_cm))
+        # 👉 voeg space_after = 0 toe na de barcode
+        p_img.paragraph_format.space_after = Pt(0)
 
         p_info1 = output_doc.add_paragraph(f"{straat} {huisnummer} {toevoeging}")
         for run in p_info1.runs:
@@ -95,7 +97,9 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         p_info2.style.font.size = Pt(14)
         p_info2.paragraph_format.space_after = Pt(0)
 
-        output_doc.add_page_break()
+        # ✅ Voeg alleen een page break toe als dit niet de laatste rij is
+        if idx < len(df) - 1:
+            output_doc.add_page_break()
 
     # Document opslaan in memory
     docx_buffer = BytesIO()
