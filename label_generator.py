@@ -71,7 +71,7 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         for run in p_title.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_title.style.font.size = Pt(14)
+        p_title.style.font.size = Pt(15)
         p_title.paragraph_format.space_after = Pt(0)
 
         p_img = output_doc.add_paragraph()
@@ -87,14 +87,14 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         for run in p_info1.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_info1.style.font.size = Pt(14)
+        p_info1.style.font.size = Pt(15)
         p_info1.paragraph_format.space_after = Pt(0)
 
         p_info2 = output_doc.add_paragraph(f"{postcode} {woonplaats}")
         for run in p_info2.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_info2.style.font.size = Pt(14)
+        p_info2.style.font.size = Pt(15)
         p_info2.paragraph_format.space_after = Pt(0)
 
         # ✅ Voeg alleen een page break toe als dit niet de laatste rij is
@@ -131,8 +131,8 @@ st.dataframe(voorbeeld_df, use_container_width=True, hide_index=True)
 uploaded_file = st.file_uploader("Sleep je `.xlsx` bestand hiernaartoe", type=["xlsx"])
 
 if uploaded_file:
-    barcode_width = 4.5
-    barcode_height = 2
+    barcode_width = 4.2
+    barcode_height = 2.3
 
     if st.button("Verwerken"):
         with st.spinner("Bezig met verwerken..."):
