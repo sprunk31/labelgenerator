@@ -125,7 +125,7 @@ st.dataframe(voorbeeld_df, use_container_width=True, hide_index=True)
 uploaded_file = st.file_uploader("Sleep je `.xlsx` bestand hiernaartoe", type=["xlsx"])
 
 if uploaded_file:
-    barcode_width = 5
+    barcode_width = 4.5
     barcode_height = 2
 
     if st.button("Verwerken"):
