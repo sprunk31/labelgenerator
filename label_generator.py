@@ -5,7 +5,7 @@ from docx import Document
 from docx.shared import Cm, Pt
 from pystrich.code128 import Code128Encoder
 from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
+from io import BytesIO, StringIO
 
 
 def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, barcode_height_cm=None):
@@ -56,7 +56,7 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         width, height = barcode_image.size
         draw.rectangle([0, height - text_area_height, width, height], fill="white")
 
-        text = ""  # (indien je nog extra tekst onder de barcode wil tonen, kun je hier iets zetten)
+        text = ""
         bbox_text = draw.textbbox((0, 0), text, font=font)
         text_y = height - text_area_height + ((text_area_height - (bbox_text[3] - bbox_text[1])) / 2)
         draw.text((horizontal_shift, text_y), text, fill="black", font=font)
@@ -71,7 +71,7 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         for run in p_title.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_title.style.font.size = Pt(14)
+        p_title.style.font.size = Pt(13)
         p_title.paragraph_format.space_after = Pt(0)
 
         p_img = output_doc.add_paragraph()
@@ -85,17 +85,15 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         for run in p_info1.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_info1.style.font.size = Pt(14)
+        p_info1.style.font.size = Pt(13)
 
         p_info2 = output_doc.add_paragraph(f"{postcode} {woonplaats}")
         for run in p_info2.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_info2.style.font.size = Pt(14)
+        p_info2.style.font.size = Pt(13)
 
-        # ✅ Alleen page break als dit NIET de laatste rij is
-        if idx < len(df) - 1:
-            output_doc.add_page_break()
+        output_doc.add_page_break()
 
     # Document opslaan in memory
     docx_buffer = BytesIO()
@@ -128,7 +126,7 @@ uploaded_file = st.file_uploader("Sleep je `.xlsx` bestand hiernaartoe", type=["
 
 if uploaded_file:
     barcode_width = 5
-    barcode_height = 2.5
+    barcode_height = 2
 
     if st.button("Verwerken"):
         with st.spinner("Bezig met verwerken..."):
