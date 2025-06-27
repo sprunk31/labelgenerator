@@ -5,7 +5,7 @@ from docx import Document
 from docx.shared import Cm, Pt
 from pystrich.code128 import Code128Encoder
 from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO, StringIO
+from io import BytesIO
 
 
 def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, barcode_height_cm=None):
