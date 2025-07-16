@@ -8,8 +8,31 @@ from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 
 
+def generate_template_excel():
+    # Definieer de juiste headers voor het Excel-template
+    headers = [
+        "straat",
+        "huisnummer",
+        "toevoeging",
+        "postcode",
+        "woonplaats",
+        "containertype"
+    ]
+    df = pd.DataFrame(columns=headers)
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Template")
+    buffer.seek(0)
+    return buffer
+
+
 def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, barcode_height_cm=None):
     df = pd.read_excel(file)
+    # Strip kolomnamen en verwijder non-breaking spaces
+    df.columns = df.columns.str.strip()
+    if 'straat' in df.columns:
+        df['straat'] = df['straat'].astype(str).str.replace('\xa0', ' ').str.strip()
 
     output_doc = Document()
     section = output_doc.sections[-1]
@@ -40,18 +63,15 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         woonplaats = str(row.get('woonplaats', ''))
         barcode_value = f"{postcode}{huisnummer}{toevoeging}"
 
-        # Barcode genereren
         encoder = Code128Encoder(barcode_value)
         barcode_img = encoder.get_imagedata()
         barcode_image = Image.open(BytesIO(barcode_img))
 
-        # Crop whitespace
         bbox = barcode_image.getbbox()
         if bbox:
             left, _, right, _ = bbox
             barcode_image = barcode_image.crop((left, 0, right, barcode_image.height))
 
-        # Tekstvlak
         draw = ImageDraw.Draw(barcode_image)
         width, height = barcode_image.size
         draw.rectangle([0, height - text_area_height, width, height], fill="white")
@@ -61,12 +81,10 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         text_y = height - text_area_height + ((text_area_height - (bbox_text[3] - bbox_text[1])) / 2)
         draw.text((horizontal_shift, text_y), text, fill="black", font=font)
 
-        # Barcode tijdelijk opslaan in memory
         barcode_buf = BytesIO()
         barcode_image.save(barcode_buf, format="PNG")
         barcode_buf.seek(0)
 
-        # Voeg toe aan Word
         p_title = output_doc.add_paragraph(containertype)
         for run in p_title.runs:
             run.font.name = 'Arial'
@@ -80,7 +98,6 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
             run_img.add_picture(barcode_buf, width=Cm(barcode_width_cm), height=Cm(barcode_height_cm))
         else:
             run_img.add_picture(barcode_buf, width=Cm(barcode_width_cm))
-        # 👉 voeg space_after = 0 toe na de barcode
         p_img.paragraph_format.space_after = Pt(0)
 
         p_info1 = output_doc.add_paragraph(f"{straat} {huisnummer} {toevoeging}")
@@ -97,38 +114,42 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         p_info2.style.font.size = Pt(15)
         p_info2.paragraph_format.space_after = Pt(0)
 
-        # ✅ Voeg alleen een page break toe als dit niet de laatste rij is
         if idx < len(df) - 1:
             output_doc.add_page_break()
 
-    # Document opslaan in memory
     docx_buffer = BytesIO()
     output_doc.save(docx_buffer)
     docx_buffer.seek(0)
     return docx_buffer
-
 
 # -----------------------
 # Streamlit UI
 # -----------------------
 st.set_page_config(page_title="Labelgenerator", page_icon="📦")
 st.title("📦 Containerlabelgenerator")
-st.write("Upload een Excel-bestand om labels te genereren met barcodes.")
+st.write("Upload een Excel-bestand om labels te genereren met barcodes of gebruik de template.")
 
-st.markdown("### 📄 Vereiste Excel structuur")
+# Genereren en downloaden van Excel-template
+st.markdown("### 📄 Download je Excel-template met de juiste headers")
+template_bytes = generate_template_excel()
+st.download_button(
+    label="📥 Download Excel-template",
+    data=template_bytes,
+    file_name="containerlabels_template.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
-voorbeeld_df = pd.DataFrame([{
-    "straat": "Teststraat",
-    "huisnummer": 9,
-    "toevoeging": "A",
-    "postcode": "1234 AA",
-    "woonplaats": "Rijswijk",
-    "containertype": "140 liter blauwe container"
-}])
+# Keuze tussen uploaden of template gebruiken
+guide = st.radio(
+    "Kies je bestand:",
+    ("Eigen Excel uploaden", "Standaard template gebruiken")
+)
 
-st.dataframe(voorbeeld_df, use_container_width=True, hide_index=True)
-
-uploaded_file = st.file_uploader("Sleep je `.xlsx` bestand hiernaartoe", type=["xlsx"])
+if guide == "Eigen Excel uploaden":
+    uploaded_file = st.file_uploader("Sleep je `.xlsx` bestand hiernaartoe", type=["xlsx"] )
+elif guide == "Standaard template gebruiken":
+    # In memory template wordt gebruikt
+    uploaded_file = template_bytes
 
 if uploaded_file:
     barcode_width = 4.2
