@@ -141,9 +141,9 @@ tab_csv, tab_manual = st.tabs(["📂 CSV uploaden", "✏️ Handmatig invoeren"]
 
 # ── Tab 1: CSV upload ──────────────────────────────────
 with tab_csv:
-    st.write("Upload een CSV-bestand om labels te genereren met barcodes.")
+    st.write("Upload een CSV of XLSX bestand om labels te genereren met barcodes.")
 
-    st.markdown("#### Vereiste CSV structuur")
+    st.markdown("#### Vereiste CSV/XLSX headers")
     voorbeeld_df = pd.DataFrame([{
         "ContainerCode": "OPK_140L",
         "StreetName": "Teststraat",
