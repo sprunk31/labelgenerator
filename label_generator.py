@@ -126,12 +126,12 @@ st.write("Upload een CSV-bestand om labels te genereren met barcodes.")
 st.markdown("### 📄 Vereiste CSV structuur")
 
 voorbeeld_df = pd.DataFrame([{
-    "ContainerCode": "140 liter blauwe container",
+    "ContainerCode": "OPK_140L",
     "StreetName": "Teststraat",
     "HouseNumber": 9,
     "Houseletter": "A",
     "HouseNumberAddition": "",
-    "ZipCode": "1234 AA",
+    "ZipCode": "1234AA",
     "City": "Rijswijk",
 }])
 
