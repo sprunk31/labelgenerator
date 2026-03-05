@@ -81,19 +81,19 @@ def generate_word_from_dataframe(df):
             run.font.name = 'Arial'
             run.bold = True
         p_title.style.font.size = Pt(15)
-        p_title.paragraph_format.space_after = Pt(8)
+        p_title.paragraph_format.space_after = Pt(6)
 
         p_img   = output_doc.add_paragraph()
         run_img = p_img.add_run()
         run_img.add_picture(barcode_buf, width=Cm(BARCODE_WIDTH), height=Cm(BARCODE_HEIGHT))
-        p_img.paragraph_format.space_after = Pt(8)
+        p_img.paragraph_format.space_after = Pt(6)
 
         p_info1 = output_doc.add_paragraph(f"{straat} {huisnummer} {toevoeging}".strip())
         for run in p_info1.runs:
             run.font.name = 'Arial'
             run.bold = True
         p_info1.style.font.size = Pt(15)
-        p_info1.paragraph_format.space_after = Pt(3)
+        p_info1.paragraph_format.space_after = Pt(2)
 
         p_info2 = output_doc.add_paragraph(f"{postcode} {woonplaats}")
         for run in p_info2.runs:
