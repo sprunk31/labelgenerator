@@ -80,7 +80,7 @@ def generate_word_from_dataframe(df):
         for run in p_title.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_title.style.font.size = Pt(15)
+        p_title.style.font.size = Pt(12)
         p_title.paragraph_format.space_after = Pt(6)
 
         p_img   = output_doc.add_paragraph()
@@ -92,14 +92,14 @@ def generate_word_from_dataframe(df):
         for run in p_info1.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_info1.style.font.size = Pt(15)
+        p_info1.style.font.size = Pt(12)
         p_info1.paragraph_format.space_after = Pt(2)
 
         p_info2 = output_doc.add_paragraph(f"{postcode} {woonplaats}")
         for run in p_info2.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_info2.style.font.size = Pt(15)
+        p_info2.style.font.size = Pt(12)
         p_info2.paragraph_format.space_after = Pt(0)
 
         if idx < len(df) - 1:
