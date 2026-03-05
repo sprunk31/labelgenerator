@@ -111,20 +111,21 @@ def generate_word_from_dataframe(df):
     return docx_buffer
 
 
-def dataframe_from_csv(file):
-    """Lees CSV en map naar interne kolomnamen."""
-    df = pd.read_csv(file)
+def dataframe_from_file(file):
+    """Lees CSV/XLSX en map naar interne kolomnamen. Hoofdletter-onafhankelijk."""
+    df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+    df.columns = df.columns.str.upper()
 
-    houseletter          = df['HouseLetter'].fillna('').astype(str).str.strip()
-    housenumber_addition = df['HouseNumberAddition'].fillna('').astype(str).str.strip()
+    houseletter          = df['HOUSELETTER'].fillna('').astype(str).str.strip()
+    housenumber_addition = df['HOUSENUMBERADDITION'].fillna('').astype(str).str.strip()
 
     return pd.DataFrame({
-        'containertype': df['ContainerCode'].apply(strip_spaces),
-        'straat':        df['StreetName'].astype(str),
-        'huisnummer':    df['HouseNumber'].astype(str),
+        'containertype': df['CONTAINERCODE'].apply(strip_spaces),
+        'straat':        df['STREETNAME'].astype(str),
+        'huisnummer':    df['HOUSENUMBER'].astype(str),
         'toevoeging':    (houseletter + housenumber_addition).str.strip(),
-        'postcode':      df['ZipCode'].apply(strip_spaces),
-        'woonplaats':    df['City'].astype(str),
+        'postcode':      df['ZIPCODE'].apply(strip_spaces),
+        'woonplaats':    df['CITY'].astype(str),
     })
 
 
@@ -147,19 +148,19 @@ with tab_csv:
         "ContainerCode": "OPK_140L",
         "StreetName": "Teststraat",
         "HouseNumber": 9,
-        "Houseletter": "A",
+        "HouseLetter": "A",
         "HouseNumberAddition": "",
         "ZipCode": "1234AA",
         "City": "Rijswijk",
     }])
-    st.dataframe(voorbeeld_df, use_container_width=True, hide_index=True)
+    st.dataframe(voorbeeld_df, width="stretch", hide_index=True)
 
-    uploaded_file = st.file_uploader("Sleep je .csv bestand hiernaartoe", type=["csv"])
+    uploaded_file = st.file_uploader("Sleep je .csv of .xlsx bestand hiernaartoe", type=["csv", "xlsx"])
 
     if uploaded_file:
         if st.button("Verwerken", key="btn_csv"):
             with st.spinner("Bezig met verwerken..."):
-                df = dataframe_from_csv(uploaded_file)
+                df = dataframe_from_file(uploaded_file)
                 docx_file = generate_word_from_dataframe(df)
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
                 st.success("Labels gegenereerd!")
