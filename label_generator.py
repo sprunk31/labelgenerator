@@ -194,7 +194,7 @@ with tab_manual:
         st.markdown(f"**Label {i + 1}**")
         c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 1, 1, 1.5, 2])
         with c1:
-            containertype = st.text_input("Containertype", key=f"ct_{i}", placeholder="140L blauw")
+            containertype = st.text_input("Containertype", key=f"ct_{i}", placeholder="OPK_140L")
         with c2:
             straat = st.text_input("Straat", key=f"st_{i}", placeholder="Teststraat")
         with c3:
