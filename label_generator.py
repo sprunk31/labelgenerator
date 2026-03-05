@@ -19,7 +19,7 @@ def generate_word_from_csv(file, barcode_text_size=12, barcode_width_cm=4, barco
     df['woonplaats']    = df['City'].astype(str)
 
     # Houseletter + HouseNumberAddition samenvoegen tot toevoeging
-    houseletter  = df['HouseLetter'].fillna('').astype(str).str.strip()
+    houseletter  = df['Houseletter'].fillna('').astype(str).str.strip()
     housenumber_addition = df['HouseNumberAddition'].fillna('').astype(str).str.strip()
     df['toevoeging'] = (houseletter + housenumber_addition).str.strip()
 
@@ -126,12 +126,12 @@ st.write("Upload een CSV-bestand om labels te genereren met barcodes.")
 st.markdown("### 📄 Vereiste CSV structuur")
 
 voorbeeld_df = pd.DataFrame([{
-    "ContainerCode": "OPK_140L",
+    "ContainerCode": "140 liter blauwe container",
     "StreetName": "Teststraat",
     "HouseNumber": 9,
     "Houseletter": "A",
     "HouseNumberAddition": "",
-    "ZipCode": "1234AA",
+    "ZipCode": "1234 AA",
     "City": "Rijswijk",
 }])
 
@@ -140,8 +140,8 @@ st.dataframe(voorbeeld_df, use_container_width=True, hide_index=True)
 uploaded_file = st.file_uploader("Sleep je .csv bestand hiernaartoe", type=["csv"])
 
 if uploaded_file:
-    barcode_width = 4.2
-    barcode_height = 2.3
+    barcode_width = 3.6
+    barcode_height = 1.9
 
     if st.button("Verwerken"):
         with st.spinner("Bezig met verwerken..."):
