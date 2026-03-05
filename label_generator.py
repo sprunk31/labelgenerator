@@ -19,7 +19,7 @@ def generate_word_from_csv(file, barcode_text_size=12, barcode_width_cm=4, barco
     df['woonplaats']    = df['City'].astype(str)
 
     # Houseletter + HouseNumberAddition samenvoegen tot toevoeging
-    houseletter  = df['Houseletter'].fillna('').astype(str).str.strip()
+    houseletter  = df['HouseLetter'].fillna('').astype(str).str.strip()
     housenumber_addition = df['HouseNumberAddition'].fillna('').astype(str).str.strip()
     df['toevoeging'] = (houseletter + housenumber_addition).str.strip()
 
