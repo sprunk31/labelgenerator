@@ -8,8 +8,20 @@ from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 
 
-def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, barcode_height_cm=None):
-    df = pd.read_excel(file)
+def generate_word_from_csv(file, barcode_text_size=12, barcode_width_cm=4, barcode_height_cm=None):
+    df = pd.read_csv(file)
+
+    # Kolom-mapping van CSV naar interne namen
+    df['containertype'] = df['ContainerCode'].astype(str)
+    df['straat']        = df['StreetName'].astype(str)
+    df['huisnummer']    = df['HouseNumber'].astype(str)
+    df['postcode']      = df['ZipCode'].astype(str)
+    df['woonplaats']    = df['City'].astype(str)
+
+    # Houseletter + HouseNumberAddition samenvoegen tot toevoeging
+    houseletter  = df['Houseletter'].fillna('').astype(str).str.strip()
+    housenumber_addition = df['HouseNumberAddition'].fillna('').astype(str).str.strip()
+    df['toevoeging'] = (houseletter + housenumber_addition).str.strip()
 
     output_doc = Document()
     section = output_doc.sections[-1]
@@ -31,13 +43,12 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
     text_area_height = 30
 
     for idx, row in df.iterrows():
-        containertype = str(row.get('containertype', ''))
-        straat = str(row.get('straat', ''))
-        huisnummer = str(row.get('huisnummer', ''))
-        toevoeging_value = row.get('toevoeging', '')
-        toevoeging = '' if pd.isna(toevoeging_value) else str(toevoeging_value)
-        postcode = str(row.get('postcode', ''))
-        woonplaats = str(row.get('woonplaats', ''))
+        containertype = row['containertype']
+        straat        = row['straat']
+        huisnummer    = row['huisnummer']
+        toevoeging    = row['toevoeging']
+        postcode      = row['postcode']
+        woonplaats    = row['woonplaats']
         barcode_value = f"{postcode}{huisnummer}{toevoeging}"
 
         # Barcode genereren
@@ -80,7 +91,6 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
             run_img.add_picture(barcode_buf, width=Cm(barcode_width_cm), height=Cm(barcode_height_cm))
         else:
             run_img.add_picture(barcode_buf, width=Cm(barcode_width_cm))
-        # 👉 voeg space_after = 0 toe na de barcode
         p_img.paragraph_format.space_after = Pt(0)
 
         p_info1 = output_doc.add_paragraph(f"{straat} {huisnummer} {toevoeging}")
@@ -97,11 +107,9 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
         p_info2.style.font.size = Pt(15)
         p_info2.paragraph_format.space_after = Pt(0)
 
-        # ✅ Voeg alleen een page break toe als dit niet de laatste rij is
         if idx < len(df) - 1:
             output_doc.add_page_break()
 
-    # Document opslaan in memory
     docx_buffer = BytesIO()
     output_doc.save(docx_buffer)
     docx_buffer.seek(0)
@@ -113,22 +121,23 @@ def generate_word_from_excel(file, barcode_text_size=12, barcode_width_cm=4, bar
 # -----------------------
 st.set_page_config(page_title="Labelgenerator", page_icon="📦")
 st.title("📦 Containerlabelgenerator")
-st.write("Upload een Excel-bestand om labels te genereren met barcodes.")
+st.write("Upload een CSV-bestand om labels te genereren met barcodes.")
 
-st.markdown("### 📄 Vereiste Excel structuur")
+st.markdown("### 📄 Vereiste CSV structuur")
 
 voorbeeld_df = pd.DataFrame([{
-    "straat": "Teststraat",
-    "huisnummer": 9,
-    "toevoeging": "A",
-    "postcode": "1234 AA",
-    "woonplaats": "Rijswijk",
-    "containertype": "140 liter blauwe container"
+    "ContainerCode": "OPK_140L",
+    "StreetName": "Teststraat",
+    "HouseNumber": 9,
+    "Houseletter": "A",
+    "HouseNumberAddition": "",
+    "ZipCode": "1234AA",
+    "City": "Rijswijk",
 }])
 
 st.dataframe(voorbeeld_df, use_container_width=True, hide_index=True)
 
-uploaded_file = st.file_uploader("Sleep je .xlsx bestand hiernaartoe", type=["xlsx"])
+uploaded_file = st.file_uploader("Sleep je .csv bestand hiernaartoe", type=["csv"])
 
 if uploaded_file:
     barcode_width = 4.2
@@ -136,7 +145,7 @@ if uploaded_file:
 
     if st.button("Verwerken"):
         with st.spinner("Bezig met verwerken..."):
-            docx_file = generate_word_from_excel(
+            docx_file = generate_word_from_csv(
                 uploaded_file,
                 barcode_text_size=18,
                 barcode_width_cm=barcode_width,
