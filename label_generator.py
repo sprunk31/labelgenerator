@@ -136,7 +136,7 @@ def dataframe_from_file(file):
 st.set_page_config(page_title="Labelgenerator", page_icon="📦")
 st.title("📦 Containerlabelgenerator")
 
-tab_csv, tab_manual = st.tabs(["📂 CSV uploaden", "✏️ Handmatig invoeren"])
+tab_csv, tab_manual = st.tabs(["📂 CSV/XLSX uploaden", "✏️ Handmatig invoeren"])
 
 
 # ── Tab 1: CSV upload ──────────────────────────────────
