@@ -7,9 +7,9 @@ from pystrich.code128 import Code128Encoder
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 
-BARCODE_WIDTH     = 3.6
-BARCODE_HEIGHT    = 1.9
-BARCODE_TEXT_SIZE = 18
+BARCODE_WIDTH     = 3.0
+BARCODE_HEIGHT    = 1.5
+BARCODE_TEXT_SIZE = 20
 MAX_ROWS          = 8
 
 
@@ -80,7 +80,7 @@ def generate_word_from_dataframe(df):
         for run in p_title.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_title.style.font.size = Pt(15)
+        p_title.style.font.size = Pt(8)
         p_title.paragraph_format.space_after = Pt(0)
 
         p_img   = output_doc.add_paragraph()
@@ -92,14 +92,14 @@ def generate_word_from_dataframe(df):
         for run in p_info1.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_info1.style.font.size = Pt(15)
+        p_info1.style.font.size = Pt(10)
         p_info1.paragraph_format.space_after = Pt(0)
 
         p_info2 = output_doc.add_paragraph(f"{postcode} {woonplaats}")
         for run in p_info2.runs:
             run.font.name = 'Arial'
             run.bold = True
-        p_info2.style.font.size = Pt(15)
+        p_info2.style.font.size = Pt(10)
         p_info2.paragraph_format.space_after = Pt(0)
 
         if idx < len(df) - 1:
@@ -194,7 +194,7 @@ with tab_manual:
         st.markdown(f"**Label {i + 1}**")
         c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 1, 1, 1.5, 2])
         with c1:
-            containertype = st.text_input("Containertype", key=f"ct_{i}", placeholder="OPK_140L")
+            containertype = st.text_input("Containertype", key=f"ct_{i}", placeholder="140L blauw")
         with c2:
             straat = st.text_input("Straat", key=f"st_{i}", placeholder="Teststraat")
         with c3:
