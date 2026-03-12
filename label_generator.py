@@ -111,15 +111,57 @@ def generate_word_from_dataframe(df):
     return docx_buffer
 
 
+def get_category_counts(df_raw):
+    """Bereken tellingen per categorie op basis van het originele DataFrame."""
+    if 'CATEGORYNAME' not in df_raw.columns:
+        return {
+            'wissel':           0,
+            'uitzetten':        len(df_raw),
+            'overgeslagen':     0,
+            'overgeslagen_rows': [],
+        }
+    cats = df_raw['CATEGORYNAME'].astype(str).str.strip().str.upper()
+
+    # Bouw lijst van overgeslagen rijen met details
+    overgeslagen_mask = cats == 'REMOVE'
+    overgeslagen_rows = []
+    for idx, row in df_raw[overgeslagen_mask].iterrows():
+        adres = f"{row.get('STREETNAME', '')} {row.get('HOUSENUMBER', '')}".strip()
+        postcode = str(row.get('ZIPCODE', '')).strip()
+        containertype = str(row.get('CONTAINERCODE', '')).strip()
+        category = str(row.get('CATEGORYNAME', '')).strip()
+        overgeslagen_rows.append({
+            'rij':          idx + 2,  # +2 voor header + 0-index
+            'adres':        adres,
+            'postcode':     postcode,
+            'container':    containertype,
+            'reden':        f"CategoryName = {category}",
+        })
+
+    return {
+        'wissel':           int((cats == 'CHANGE').sum()),
+        'uitzetten':        int(((cats == 'NEW') | (cats == 'EXTRA')).sum()),
+        'overgeslagen':     int(overgeslagen_mask.sum()),
+        'overgeslagen_rows': overgeslagen_rows,
+    }
+
+
 def dataframe_from_file(file):
-    """Lees CSV/XLSX en map naar interne kolomnamen. Hoofdletter-onafhankelijk."""
+    """Lees CSV/XLSX en map naar interne kolomnamen. Hoofdletter-onafhankelijk.
+    Geeft een tuple terug: (df, category_counts)
+    """
     df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
     df.columns = df.columns.str.upper()
+
+    counts = get_category_counts(df)
+
+    if 'CATEGORYNAME' in df.columns:
+        df = df[df['CATEGORYNAME'].astype(str).str.strip().str.upper() != 'REMOVE']
 
     houseletter          = df['HOUSELETTER'].fillna('').astype(str).str.strip()
     housenumber_addition = df['HOUSENUMBERADDITION'].fillna('').astype(str).str.strip()
 
-    return pd.DataFrame({
+    result_df = pd.DataFrame({
         'containertype': df['CONTAINERCODE'].apply(strip_spaces),
         'straat':        df['STREETNAME'].astype(str),
         'huisnummer':    df['HOUSENUMBER'].astype(str),
@@ -127,6 +169,8 @@ def dataframe_from_file(file):
         'postcode':      df['ZIPCODE'].apply(strip_spaces),
         'woonplaats':    df['CITY'].astype(str),
     })
+
+    return result_df, counts
 
 
 # -------------------------------------------------------
@@ -160,10 +204,22 @@ with tab_csv:
     if uploaded_file:
         if st.button("Verwerken", key="btn_csv"):
             with st.spinner("Bezig met verwerken..."):
-                df = dataframe_from_file(uploaded_file)
+                df, counts = dataframe_from_file(uploaded_file)
                 docx_file = generate_word_from_dataframe(df)
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-                st.success("Labels gegenereerd!")
+                st.success(f"✅ {len(df)} label(s) gegenereerd!")
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("🔄 Wissel",    counts['wissel'],      help="CategoryName = CHANGE")
+                col2.metric("📦 Uitzetten", counts['uitzetten'],   help="CategoryName = NEW of EXTRA")
+                col3.metric("⛔ Overgeslagen", counts['overgeslagen'], help="CategoryName = REMOVE — geen label gegenereerd")
+
+                if counts['overgeslagen_rows']:
+                    with st.expander(f"⛔ {counts['overgeslagen']} overgeslagen rij(en) — klik om te bekijken"):
+                        overgeslagen_df = pd.DataFrame(counts['overgeslagen_rows'])
+                        overgeslagen_df.columns = ['Rij', 'Adres', 'Postcode', 'Containertype', 'Reden']
+                        st.dataframe(overgeslagen_df, hide_index=True, use_container_width=True)
+
                 st.download_button(
                     label="📥 Download Word-bestand",
                     data=docx_file,
@@ -175,7 +231,7 @@ with tab_csv:
 
 # ── Tab 2: Handmatig invoeren ──────────────────────────
 with tab_manual:
-    st.write(f"Vul hieronder handmatig de gegevens in (maximaal 10 labels).")
+    st.write(f"Vul hieronder handmatig de gegevens in (maximaal {MAX_ROWS} labels).")
 
     if 'num_rows' not in st.session_state:
         st.session_state.num_rows = 1
