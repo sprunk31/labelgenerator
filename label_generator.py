@@ -10,7 +10,7 @@ from io import BytesIO
 BARCODE_WIDTH     = 3.6
 BARCODE_HEIGHT    = 1.9
 BARCODE_TEXT_SIZE = 18
-MAX_ROWS          = 10
+MAX_ROWS          = 8
 
 
 # -------------------------------------------------------
@@ -175,7 +175,7 @@ with tab_csv:
 
 # ── Tab 2: Handmatig invoeren ──────────────────────────
 with tab_manual:
-    st.write(f"Vul hieronder handmatig de gegevens in (maximaal {MAX_ROWS} labels).")
+    st.write(f"Vul hieronder handmatig de gegevens in (maximaal 10 labels).")
 
     if 'num_rows' not in st.session_state:
         st.session_state.num_rows = 1
