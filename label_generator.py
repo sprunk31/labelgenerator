@@ -112,36 +112,57 @@ def generate_word_from_dataframe(df):
 
 
 def get_category_counts(df_raw):
-    """Bereken tellingen per categorie op basis van het originele DataFrame."""
-    if 'CATEGORYNAME' not in df_raw.columns:
-        return {
-            'wissel':           0,
-            'uitzetten':        len(df_raw),
-            'overgeslagen':     0,
-            'overgeslagen_rows': [],
-        }
-    cats = df_raw['CATEGORYNAME'].astype(str).str.strip().str.upper()
+    """Bereken tellingen per categorie en validatiefouten op basis van het originele DataFrame.
+    REMOVE-rijen worden gefilterd voor de telling. Overgeslagen = rijen met ontbrekende/ongeldige velden.
+    """
+    # Filter REMOVE-rijen eerst weg voor de tellingen
+    if 'CATEGORYNAME' in df_raw.columns:
+        cats_all = df_raw['CATEGORYNAME'].astype(str).str.strip().str.upper()
+        df_telling = df_raw[cats_all != 'REMOVE'].copy()
+    else:
+        df_telling = df_raw.copy()
 
-    # Bouw lijst van overgeslagen rijen met details
-    overgeslagen_mask = cats == 'REMOVE'
+    # Tellingen op gefilterd DataFrame
+    if 'CATEGORYNAME' in df_telling.columns:
+        cats = df_telling['CATEGORYNAME'].astype(str).str.strip().str.upper()
+        wissel    = int((cats == 'CHANGE').sum())
+        uitzetten = int(((cats == 'NEW') | (cats == 'EXTRA')).sum())
+    else:
+        wissel    = 0
+        uitzetten = len(df_telling)
+
+    # Overgeslagen: rijen met ontbrekende/ongeldige velden (op het totale df incl. REMOVE-filter)
     overgeslagen_rows = []
-    for idx, row in df_raw[overgeslagen_mask].iterrows():
-        adres = f"{row.get('STREETNAME', '')} {row.get('HOUSENUMBER', '')}".strip()
-        postcode = str(row.get('ZIPCODE', '')).strip()
-        containertype = str(row.get('CONTAINERCODE', '')).strip()
-        category = str(row.get('CATEGORYNAME', '')).strip()
-        overgeslagen_rows.append({
-            'rij':          idx + 2,  # +2 voor header + 0-index
-            'adres':        adres,
-            'postcode':     postcode,
-            'container':    containertype,
-            'reden':        f"CategoryName = {category}",
-        })
+    for idx, row in df_telling.iterrows():
+        redenen = []
+        containercode = str(row.get('CONTAINERCODE', '')).strip()
+        streetname    = str(row.get('STREETNAME', '')).strip()
+        zipcode       = str(row.get('ZIPCODE', '')).strip()
+        city          = str(row.get('CITY', '')).strip()
+
+        if len(containercode) < 5:
+            redenen.append(f"ContainerCode te kort of leeg ('{containercode}')")
+        if not streetname:
+            redenen.append("StreetName leeg")
+        if not zipcode:
+            redenen.append("ZipCode leeg")
+        if not city:
+            redenen.append("City leeg")
+
+        if redenen:
+            adres = f"{streetname} {str(row.get('HOUSENUMBER', '')).strip()}".strip()
+            overgeslagen_rows.append({
+                'rij':       idx + 2,
+                'adres':     adres or '—',
+                'postcode':  zipcode or '—',
+                'container': containercode or '—',
+                'reden':     ' · '.join(redenen),
+            })
 
     return {
-        'wissel':           int((cats == 'CHANGE').sum()),
-        'uitzetten':        int(((cats == 'NEW') | (cats == 'EXTRA')).sum()),
-        'overgeslagen':     int(overgeslagen_mask.sum()),
+        'wissel':            wissel,
+        'uitzetten':         uitzetten,
+        'overgeslagen':      len(overgeslagen_rows),
         'overgeslagen_rows': overgeslagen_rows,
     }
 
