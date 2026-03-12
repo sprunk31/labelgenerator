@@ -10,7 +10,7 @@ from io import BytesIO
 BARCODE_WIDTH     = 3.6
 BARCODE_HEIGHT    = 1.9
 BARCODE_TEXT_SIZE = 18
-MAX_ROWS          = 8
+MAX_ROWS          = 10
 
 
 # -------------------------------------------------------
