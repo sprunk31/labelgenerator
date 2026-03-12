@@ -10,7 +10,10 @@ from io import BytesIO
 BARCODE_WIDTH     = 3.6
 BARCODE_HEIGHT    = 1.9
 BARCODE_TEXT_SIZE = 18
-MAX_ROWS          = 8
+MAX_ROWS          = 10
+
+REQUIRED_COLUMNS = ['CONTAINERCODE', 'STREETNAME', 'HOUSENUMBER', 'HOUSELETTER',
+                    'HOUSENUMBERADDITION', 'ZIPCODE', 'CITY']
 
 
 # -------------------------------------------------------
@@ -22,10 +25,54 @@ def strip_spaces(value):
     return str(value).replace(" ", "").strip()
 
 
-def generate_word_from_dataframe(df):
-    """Genereer Word-document vanuit een DataFrame met interne kolomnamen:
-    containertype, straat, huisnummer, toevoeging, postcode, woonplaats
+def validate_dataframe(df):
     """
+    Valideer het DataFrame op ontbrekende kolommen en lege verplichte velden.
+    Geeft een lijst van foutmeldingen terug. Lege lijst = geen fouten.
+    """
+    errors = []
+
+    # Controleer verplichte kolommen
+    missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing_cols:
+        errors.append(f"❌ Ontbrekende kolom(men): **{', '.join(missing_cols)}**")
+        return errors  # Verdere validatie heeft geen zin zonder de kolommen
+
+    # Controleer lege ContainerCode per rij
+    empty_containercode = df[df['CONTAINERCODE'].astype(str).str.strip() == '']
+    if not empty_containercode.empty:
+        rijen = ', '.join(str(i + 2) for i in empty_containercode.index.tolist())  # +2: header + 0-index
+        errors.append(f"❌ **ContainerCode** is leeg op rij(en): {rijen}")
+
+    # Controleer lege ZipCode per rij
+    empty_zipcode = df[df['ZIPCODE'].astype(str).str.strip() == '']
+    if not empty_zipcode.empty:
+        rijen = ', '.join(str(i + 2) for i in empty_zipcode.index.tolist())
+        errors.append(f"❌ **ZipCode** is leeg op rij(en): {rijen}")
+
+    # Controleer lege HouseNumber per rij
+    empty_housenumber = df[df['HOUSENUMBER'].astype(str).str.strip() == '']
+    if not empty_housenumber.empty:
+        rijen = ', '.join(str(i + 2) for i in empty_housenumber.index.tolist())
+        errors.append(f"❌ **HouseNumber** is leeg op rij(en): {rijen}")
+
+    # Controleer lege StreetName per rij
+    empty_streetname = df[df['STREETNAME'].astype(str).str.strip() == '']
+    if not empty_streetname.empty:
+        rijen = ', '.join(str(i + 2) for i in empty_streetname.index.tolist())
+        errors.append(f"❌ **StreetName** is leeg op rij(en): {rijen}")
+
+    # Controleer lege City per rij
+    empty_city = df[df['CITY'].astype(str).str.strip() == '']
+    if not empty_city.empty:
+        rijen = ', '.join(str(i + 2) for i in empty_city.index.tolist())
+        errors.append(f"❌ **City** is leeg op rij(en): {rijen}")
+
+    return errors
+
+
+def generate_word_from_dataframe(df):
+    """Genereer Word-document vanuit een DataFrame met interne kolomnamen."""
     output_doc = Document()
     section = output_doc.sections[-1]
     section.page_width    = Cm(10.0)
@@ -54,9 +101,15 @@ def generate_word_from_dataframe(df):
         woonplaats    = str(row.get('woonplaats', ''))
         barcode_value = f"{postcode}{huisnummer}{toevoeging}"
 
-        encoder       = Code128Encoder(barcode_value)
-        barcode_img   = encoder.get_imagedata()
-        barcode_image = Image.open(BytesIO(barcode_img))
+        try:
+            encoder       = Code128Encoder(barcode_value)
+            barcode_img   = encoder.get_imagedata()
+            barcode_image = Image.open(BytesIO(barcode_img))
+        except Exception as e:
+            raise ValueError(
+                f"Barcode genereren mislukt voor rij {idx + 1} "
+                f"(postcode: '{postcode}', huisnummer: '{huisnummer}', toevoeging: '{toevoeging}'): {e}"
+            )
 
         bbox = barcode_image.getbbox()
         if bbox:
@@ -113,8 +166,20 @@ def generate_word_from_dataframe(df):
 
 def dataframe_from_file(file):
     """Lees CSV/XLSX en map naar interne kolomnamen. Hoofdletter-onafhankelijk."""
-    df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+    try:
+        df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+    except Exception as e:
+        raise ValueError(f"Bestand kon niet worden gelezen: {e}")
+
+    if df.empty:
+        raise ValueError("Het bestand is leeg — er zijn geen rijen gevonden.")
+
     df.columns = df.columns.str.upper()
+
+    # Valideer kolommen en inhoud
+    validation_errors = validate_dataframe(df)
+    if validation_errors:
+        raise ValueError("\n\n".join(validation_errors))
 
     houseletter          = df['HOUSELETTER'].fillna('').astype(str).str.strip()
     housenumber_addition = df['HOUSENUMBERADDITION'].fillna('').astype(str).str.strip()
@@ -160,10 +225,26 @@ with tab_csv:
     if uploaded_file:
         if st.button("Verwerken", key="btn_csv"):
             with st.spinner("Bezig met verwerken..."):
-                df = dataframe_from_file(uploaded_file)
-                docx_file = generate_word_from_dataframe(df)
+                try:
+                    df = dataframe_from_file(uploaded_file)
+                except ValueError as e:
+                    st.error(f"**Fout bij het inlezen van het bestand:**\n\n{e}")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"**Onverwachte fout bij het inlezen:**\n\n{e}")
+                    st.stop()
+
+                try:
+                    docx_file = generate_word_from_dataframe(df)
+                except ValueError as e:
+                    st.error(f"**Fout bij het genereren van labels:**\n\n{e}")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"**Onverwachte fout bij het genereren van labels:**\n\n{e}")
+                    st.stop()
+
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-                st.success("Labels gegenereerd!")
+                st.success(f"✅ {len(df)} label(s) gegenereerd!")
                 st.download_button(
                     label="📥 Download Word-bestand",
                     data=docx_file,
@@ -175,7 +256,7 @@ with tab_csv:
 
 # ── Tab 2: Handmatig invoeren ──────────────────────────
 with tab_manual:
-    st.write(f"Vul hieronder handmatig de gegevens in (maximaal 10 labels).")
+    st.write(f"Vul hieronder handmatig de gegevens in (maximaal {MAX_ROWS} labels).")
 
     if 'num_rows' not in st.session_state:
         st.session_state.num_rows = 1
@@ -195,7 +276,7 @@ with tab_manual:
         st.markdown(f"**Label {i + 1}**")
         c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 1, 1, 1.5, 2])
         with c1:
-            containertype = st.text_input("Containertype", key=f"ct_{i}", placeholder="OPK_140L")
+            containertype = st.text_input("Containertype *", key=f"ct_{i}", placeholder="OPK_140L")
         with c2:
             straat = st.text_input("Straat", key=f"st_{i}", placeholder="Teststraat")
         with c3:
@@ -220,22 +301,51 @@ with tab_manual:
 
     if st.button("Verwerken", key="btn_manual"):
         df_manual = pd.DataFrame(rows)
-        # Alleen rijen met minimaal postcode + huisnummer
-        df_manual = df_manual[
-            (df_manual['postcode'] != '') & (df_manual['huisnummer'] != '')
-        ].reset_index(drop=True)
 
-        if df_manual.empty:
-            st.warning("Vul minimaal postcode en huisnummer in voor één label.")
+        # Validatie: zoek rijen met fouten en rapporteer ze allemaal
+        validation_errors = []
+
+        for i, row in df_manual.iterrows():
+            label_num = i + 1
+            rij_fouten = []
+
+            if not row['containertype']:
+                rij_fouten.append("Containertype is verplicht")
+            if not row['postcode']:
+                rij_fouten.append("Postcode ontbreekt")
+            if not row['huisnummer']:
+                rij_fouten.append("Huisnummer ontbreekt")
+
+            if rij_fouten:
+                validation_errors.append(f"**Label {label_num}:** " + " · ".join(rij_fouten))
+
+        if validation_errors:
+            st.error("**Vul de verplichte velden in voordat je verder gaat:**\n\n" + "\n\n".join(validation_errors))
         else:
-            with st.spinner("Bezig met verwerken..."):
-                docx_file = generate_word_from_dataframe(df_manual)
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-                st.success(f"{len(df_manual)} label(s) gegenereerd!")
-                st.download_button(
-                    label="📥 Download Word-bestand",
-                    data=docx_file,
-                    file_name=f"containerlabels_{timestamp}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="dl_manual"
-                )
+            # Filter rijen zonder postcode of huisnummer (extra zekerheid)
+            df_manual = df_manual[
+                (df_manual['postcode'] != '') & (df_manual['huisnummer'] != '')
+            ].reset_index(drop=True)
+
+            if df_manual.empty:
+                st.warning("Er zijn geen geldige labels om te verwerken.")
+            else:
+                with st.spinner("Bezig met verwerken..."):
+                    try:
+                        docx_file = generate_word_from_dataframe(df_manual)
+                    except ValueError as e:
+                        st.error(f"**Fout bij het genereren van labels:**\n\n{e}")
+                        st.stop()
+                    except Exception as e:
+                        st.error(f"**Onverwachte fout bij het genereren van labels:**\n\n{e}")
+                        st.stop()
+
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+                    st.success(f"✅ {len(df_manual)} label(s) gegenereerd!")
+                    st.download_button(
+                        label="📥 Download Word-bestand",
+                        data=docx_file,
+                        file_name=f"containerlabels_{timestamp}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key="dl_manual"
+                    )
