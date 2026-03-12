@@ -76,23 +76,30 @@ def generate_word_from_dataframe(df):
         barcode_image.save(barcode_buf, format="PNG")
         barcode_buf.seek(0)
 
+        # Voeg page break toe vóór elk label (behalve het eerste)
+        if idx > 0:
+            output_doc.add_page_break()
+
         p_title = output_doc.add_paragraph(containertype)
         for run in p_title.runs:
             run.font.name = 'Arial'
             run.bold = True
         p_title.style.font.size = Pt(12)
-        p_title.paragraph_format.space_after = Pt(6)
+        p_title.paragraph_format.space_before = Pt(0)
+        p_title.paragraph_format.space_after = Pt(4)
 
         p_img   = output_doc.add_paragraph()
         run_img = p_img.add_run()
         run_img.add_picture(barcode_buf, width=Cm(BARCODE_WIDTH), height=Cm(BARCODE_HEIGHT))
-        p_img.paragraph_format.space_after = Pt(6)
+        p_img.paragraph_format.space_before = Pt(0)
+        p_img.paragraph_format.space_after = Pt(4)
 
         p_info1 = output_doc.add_paragraph(f"{straat} {huisnummer} {toevoeging}".strip())
         for run in p_info1.runs:
             run.font.name = 'Arial'
             run.bold = True
         p_info1.style.font.size = Pt(12)
+        p_info1.paragraph_format.space_before = Pt(0)
         p_info1.paragraph_format.space_after = Pt(2)
 
         p_info2 = output_doc.add_paragraph(f"{postcode} {woonplaats}")
@@ -100,10 +107,8 @@ def generate_word_from_dataframe(df):
             run.font.name = 'Arial'
             run.bold = True
         p_info2.style.font.size = Pt(12)
+        p_info2.paragraph_format.space_before = Pt(0)
         p_info2.paragraph_format.space_after = Pt(0)
-
-        if idx < len(df) - 1:
-            output_doc.add_page_break()
 
     docx_buffer = BytesIO()
     output_doc.save(docx_buffer)
