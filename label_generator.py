@@ -400,7 +400,7 @@ with tab_xlsx:
                     with st.expander(f"⛔ {counts['overgeslagen']} overgeslagen rij(en) — klik om te bekijken"):
                         overgeslagen_df = pd.DataFrame(counts['overgeslagen_rows'])
                         overgeslagen_df.columns = ['Rij', 'Adres', 'Postcode', 'Containertype', 'Reden']
-                        st.dataframe(overgeslagen_df, hide_index=True, use_container_width=True)
+                        st.dataframe(overgeslagen_df, hide_index=True, width="stretch")
 
                 st.download_button(
                     label="📥 Download Word-bestand",
