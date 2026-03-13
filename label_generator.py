@@ -45,7 +45,7 @@ def generate_word_from_dataframe(df):
     horizontal_shift = int(0.75 * pixels_per_cm)
     text_area_height = 30
 
-    for idx, row in df.iterrows():
+    for label_idx, (idx, row) in enumerate(df.iterrows()):
         containertype = str(row.get('containertype', ''))
         straat        = str(row.get('straat', ''))
         huisnummer    = str(row.get('huisnummer', ''))
@@ -77,7 +77,7 @@ def generate_word_from_dataframe(df):
         barcode_buf.seek(0)
 
         # Voeg page break toe vóór elk label (behalve het eerste)
-        if idx > 0:
+        if label_idx > 0:
             output_doc.add_page_break()
 
         p_title = output_doc.add_paragraph(containertype)
@@ -180,6 +180,15 @@ def dataframe_from_file(file):
     df.columns = df.columns.str.upper()
 
     counts = get_category_counts(df)
+
+    # Sorteer oplopend op ZipCode, HouseNumber, HouseLetter, HouseNumberAddition
+    sort_cols = []
+    for col in ['ZIPCODE', 'HOUSENUMBER', 'HOUSELETTER', 'HOUSENUMBERADDITION']:
+        if col in df.columns:
+            sort_cols.append(col)
+    if sort_cols:
+        df['HOUSENUMBER'] = pd.to_numeric(df['HOUSENUMBER'], errors='coerce').fillna(0).astype(int)
+        df = df.sort_values(by=sort_cols, ascending=True, na_position='last').reset_index(drop=True)
 
     if 'CATEGORYNAME' in df.columns:
         df = df[df['CATEGORYNAME'].astype(str).str.strip().str.upper() != 'REMOVE']
