@@ -264,14 +264,20 @@ def dataframe_from_file(file):
             streetname    = str(row.get('Straat', '') or '').strip()
             zipcode       = strip_spaces(str(row.get('Postcode', '') or ''))
             city          = str(row.get('Stad', '') or '').strip()
+            huisnummer_v  = str(row.get('Huisnummer', '') or '').strip()
+            subtask_v     = str(row.get('SubTaskDesc', '') or '').strip()
             if len(containercode) < 5:
                 redenen.append(f"ContainerCode te kort of leeg ('{containercode}')")
             if not streetname:
-                redenen.append("StreetName leeg")
+                redenen.append("Straat leeg")
             if not zipcode:
-                redenen.append("ZipCode leeg")
+                redenen.append("Postcode leeg")
             if not city:
-                redenen.append("City leeg")
+                redenen.append("Stad leeg")
+            if not huisnummer_v:
+                redenen.append("Huisnummer leeg")
+            if not subtask_v:
+                redenen.append("SubTaskDesc leeg")
             if redenen:
                 huisnummer = str(row.get('Huisnummer', '')).strip()
                 overgeslagen_rows.append({
