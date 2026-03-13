@@ -426,16 +426,17 @@ with tab_manual:
 
     if 'num_rows' not in st.session_state:
         st.session_state.num_rows = 1
-    else:
-        st.session_state.num_rows = min(st.session_state.num_rows, MAX_ROWS)
+
+    # Altijd clippen naar geldige range, ook bij stale session state
+    st.session_state.num_rows = max(1, min(st.session_state.num_rows, MAX_ROWS))
 
     col_add, col_remove = st.columns([1, 1])
     with col_add:
         if st.button("➕ Rij toevoegen", disabled=st.session_state.num_rows >= MAX_ROWS):
-            st.session_state.num_rows += 1
+            st.session_state.num_rows = min(st.session_state.num_rows + 1, MAX_ROWS)
     with col_remove:
         if st.button("➖ Rij verwijderen", disabled=st.session_state.num_rows <= 1):
-            st.session_state.num_rows -= 1
+            st.session_state.num_rows = max(st.session_state.num_rows - 1, 1)
 
     st.markdown("---")
 
