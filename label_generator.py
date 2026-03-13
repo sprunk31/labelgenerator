@@ -259,31 +259,47 @@ def dataframe_from_file(file):
             cat, container = parse_subtaskdesc(str(row.get('SubTaskDesc', '')))
             if cat == 'REMOVE':
                 continue
+            def leeg(val):
+                """Geeft True als de waarde leeg, NaN of de string 'nan' is."""
+                import pandas as pd
+                if val is None:
+                    return True
+                if isinstance(val, float) and pd.isna(val):
+                    return True
+                return str(val).strip().lower() in ('', 'nan', 'none')
+
             redenen = []
             containercode = strip_spaces(container or '')
-            streetname    = str(row.get('Straat', '') or '').strip()
-            zipcode       = strip_spaces(str(row.get('Postcode', '') or ''))
-            city          = str(row.get('Stad', '') or '').strip()
-            huisnummer_v  = str(row.get('Huisnummer', '') or '').strip()
-            subtask_v     = str(row.get('SubTaskDesc', '') or '').strip()
+            streetname    = row.get('Straat', '')
+            zipcode_raw   = row.get('Postcode', '')
+            city_raw      = row.get('Stad', '')
+            huisnummer_v  = row.get('Huisnummer', '')
+            subtask_v     = row.get('SubTaskDesc', '')
+
+            streetname_s  = '' if leeg(streetname)  else str(streetname).strip()
+            zipcode_s     = '' if leeg(zipcode_raw)  else strip_spaces(str(zipcode_raw))
+            city_s        = '' if leeg(city_raw)     else str(city_raw).strip()
+            huisnummer_s  = '' if leeg(huisnummer_v) else str(huisnummer_v).strip()
+            subtask_s     = '' if leeg(subtask_v)    else str(subtask_v).strip()
+
             if len(containercode) < 5:
                 redenen.append(f"ContainerCode te kort of leeg ('{containercode}')")
-            if not streetname:
+            if not streetname_s:
                 redenen.append("Straat leeg")
-            if not zipcode:
+            if not zipcode_s:
                 redenen.append("Postcode leeg")
-            if not city:
+            if not city_s:
                 redenen.append("Stad leeg")
-            if not huisnummer_v:
+            if not huisnummer_s:
                 redenen.append("Huisnummer leeg")
-            if not subtask_v:
+            if not subtask_s:
                 redenen.append("SubTaskDesc leeg")
             if redenen:
                 huisnummer = str(row.get('Huisnummer', '')).strip()
                 overgeslagen_rows.append({
                     'rij':       idx + 2,
-                    'adres':     f"{streetname} {huisnummer}".strip() or '—',
-                    'postcode':  zipcode or '—',
+                    'adres':     f"{streetname_s} {huisnummer_s}".strip() or '—',
+                    'postcode':  zipcode_s or '—',
                     'container': containercode or '—',
                     'reden':     ' · '.join(redenen),
                 })
