@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import re
 from docx import Document
 from docx.shared import Cm, Pt
 from pystrich.code128 import Code128Encoder
@@ -173,165 +172,40 @@ def get_category_counts(df_raw):
     }
 
 
-XIMMIO_EXPORT_COLUMNS = {'Stad', 'Straat', 'Huisnummer', 'Postcode', 'SubTaskDesc'}
-
-
-def is_ximmio_export(df):
-    """Detecteer of het bestand een Ximmio bakwagen export is."""
-    return XIMMIO_EXPORT_COLUMNS.issubset(set(df.columns))
-
-
-def parse_subtaskdesc(value):
-    """Extraheer CategoryName en ContainerType uit SubTaskDesc.
-    - CHANGE: containertype staat na '>' tussen ()
-    - NEW/EXTRA: containertype staat tussen () aan het einde
-    - REMOVE: geen containertype nodig
-    Geeft (category, containertype) terug.
-    """
-    s = str(value)
-    m_cat = re.search(r'-\s*(CHANGE|NEW|EXTRA|REMOVE)\b', s, re.IGNORECASE)
-    if not m_cat:
-        return None, None
-    cat = m_cat.group(1).upper()
-
-    if cat == 'CHANGE':
-        m = re.search(r'>\s*([^)]+)\)', s)
-        container = m.group(1).strip() if m else None
-    elif cat in ('NEW', 'EXTRA'):
-        m = re.search(r'\(([^)]+)\)\s*$', s)
-        container = m.group(1).strip() if m else None
-    else:
-        container = None
-
-    return cat, container
-
-
-def dataframe_from_ximmio_export(df):
-    """Map Ximmio bakwagen export naar intern DataFrame formaat."""
-    rows = []
-    for _, row in df.iterrows():
-        subtask = str(row.get('SubTaskDesc', ''))
-        cat, container = parse_subtaskdesc(subtask)
-
-        if cat == 'REMOVE':
-            continue  # Overslaan
-
-        huisletter   = str(row.get('Huisletter', '') or '').strip()
-        toevoeging   = str(row.get('Huisnummer toevoeging', '') or '').strip()
-        # Verwijder leading underscore uit toevoeging (Ximmio-specifiek)
-        if toevoeging.startswith('_'):
-            toevoeging = toevoeging[1:]
-
-        rows.append({
-            'containertype': strip_spaces(container or ''),
-            'straat':        str(row.get('Straat', '')).strip(),
-            'huisnummer':    str(row.get('Huisnummer', '')).strip(),
-            'toevoeging':    (huisletter + toevoeging).strip(),
-            'postcode':      strip_spaces(str(row.get('Postcode', ''))),
-            'woonplaats':    str(row.get('Stad', '')).strip(),
-            '_cat':          cat or '',
-            '_zipcode_raw':  str(row.get('Postcode', '')).strip(),
-            '_huisnummer_raw': str(row.get('Huisnummer', '')).strip(),
-            '_huisletter_raw': huisletter,
-            '_toevoeging_raw': toevoeging,
-        })
-
-    result_df = pd.DataFrame(rows) if rows else pd.DataFrame()
-    return result_df
-
-
 def dataframe_from_file(file):
-    """Lees CSV/XLSX/CSV en detecteer automatisch het formaat.
+    """Lees CSV/XLSX en map naar interne kolomnamen. Hoofdletter-onafhankelijk.
     Geeft een tuple terug: (df, category_counts)
     """
-    df_raw = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+    df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+    df.columns = df.columns.str.upper()
 
-    if is_ximmio_export(df_raw):
-        # ── Ximmio bakwagen export ──────────────────────────────
-        # Tellingen uit SubTaskDesc voor de rapportage
-        cats_series = df_raw['SubTaskDesc'].apply(lambda v: parse_subtaskdesc(v)[0])
-        cats_upper  = cats_series.fillna('').str.upper()
-        overgeslagen_rows = []
-        for idx, row in df_raw.iterrows():
-            cat, container = parse_subtaskdesc(str(row.get('SubTaskDesc', '')))
-            if cat == 'REMOVE':
-                continue
-            redenen = []
-            containercode = strip_spaces(container or '')
-            streetname    = str(row.get('Straat', '') or '').strip()
-            zipcode       = strip_spaces(str(row.get('Postcode', '') or ''))
-            city          = str(row.get('Stad', '') or '').strip()
-            if len(containercode) < 5:
-                redenen.append(f"ContainerCode te kort of leeg ('{containercode}')")
-            if not streetname:
-                redenen.append("StreetName leeg")
-            if not zipcode:
-                redenen.append("ZipCode leeg")
-            if not city:
-                redenen.append("City leeg")
-            if redenen:
-                huisnummer = str(row.get('Huisnummer', '')).strip()
-                overgeslagen_rows.append({
-                    'rij':       idx + 2,
-                    'adres':     f"{streetname} {huisnummer}".strip() or '—',
-                    'postcode':  zipcode or '—',
-                    'container': containercode or '—',
-                    'reden':     ' · '.join(redenen),
-                })
+    counts = get_category_counts(df)
 
-        counts = {
-            'wissel':            int((cats_upper == 'CHANGE').sum()),
-            'uitzetten':         int(((cats_upper == 'NEW') | (cats_upper == 'EXTRA')).sum()),
-            'overgeslagen':      len(overgeslagen_rows),
-            'overgeslagen_rows': overgeslagen_rows,
-        }
+    # Sorteer oplopend op ZipCode, HouseNumber, HouseLetter, HouseNumberAddition
+    sort_cols = []
+    for col in ['ZIPCODE', 'HOUSENUMBER', 'HOUSELETTER', 'HOUSENUMBERADDITION']:
+        if col in df.columns:
+            sort_cols.append(col)
+    if sort_cols:
+        df['HOUSENUMBER'] = pd.to_numeric(df['HOUSENUMBER'], errors='coerce').fillna(0).astype(int)
+        df = df.sort_values(by=sort_cols, ascending=True, na_position='last').reset_index(drop=True)
 
-        result_df = dataframe_from_ximmio_export(df_raw)
+    if 'CATEGORYNAME' in df.columns:
+        df = df[df['CATEGORYNAME'].astype(str).str.strip().str.upper() != 'REMOVE']
 
-        # Sorteer oplopend
-        if not result_df.empty:
-            result_df['_hn_int'] = pd.to_numeric(result_df['_huisnummer_raw'], errors='coerce').fillna(0).astype(int)
-            result_df = result_df.sort_values(
-                by=['_zipcode_raw', '_hn_int', '_huisletter_raw', '_toevoeging_raw'],
-                ascending=True, na_position='last'
-            ).reset_index(drop=True)
-            result_df = result_df.drop(columns=['_cat', '_zipcode_raw', '_huisnummer_raw',
-                                                 '_huisletter_raw', '_toevoeging_raw', '_hn_int'])
+    houseletter          = df['HOUSELETTER'].fillna('').astype(str).str.strip()
+    housenumber_addition = df['HOUSENUMBERADDITION'].fillna('').astype(str).str.strip()
 
-        return result_df, counts
+    result_df = pd.DataFrame({
+        'containertype': df['CONTAINERCODE'].apply(strip_spaces),
+        'straat':        df['STREETNAME'].astype(str),
+        'huisnummer':    df['HOUSENUMBER'].astype(str),
+        'toevoeging':    (houseletter + housenumber_addition).str.strip(),
+        'postcode':      df['ZIPCODE'].apply(strip_spaces),
+        'woonplaats':    df['CITY'].astype(str),
+    })
 
-    else:
-        # ── Standaard Ximmio CSV/XLSX export ───────────────────
-        df = df_raw.copy()
-        df.columns = df.columns.str.upper()
-
-        counts = get_category_counts(df)
-
-        # Sorteer oplopend op ZipCode, HouseNumber, HouseLetter, HouseNumberAddition
-        sort_cols = []
-        for col in ['ZIPCODE', 'HOUSENUMBER', 'HOUSELETTER', 'HOUSENUMBERADDITION']:
-            if col in df.columns:
-                sort_cols.append(col)
-        if sort_cols:
-            df['HOUSENUMBER'] = pd.to_numeric(df['HOUSENUMBER'], errors='coerce').fillna(0).astype(int)
-            df = df.sort_values(by=sort_cols, ascending=True, na_position='last').reset_index(drop=True)
-
-        if 'CATEGORYNAME' in df.columns:
-            df = df[df['CATEGORYNAME'].astype(str).str.strip().str.upper() != 'REMOVE']
-
-        houseletter          = df['HOUSELETTER'].fillna('').astype(str).str.strip()
-        housenumber_addition = df['HOUSENUMBERADDITION'].fillna('').astype(str).str.strip()
-
-        result_df = pd.DataFrame({
-            'containertype': df['CONTAINERCODE'].apply(strip_spaces),
-            'straat':        df['STREETNAME'].astype(str),
-            'huisnummer':    df['HOUSENUMBER'].astype(str),
-            'toevoeging':    (houseletter + housenumber_addition).str.strip(),
-            'postcode':      df['ZIPCODE'].apply(strip_spaces),
-            'woonplaats':    df['CITY'].astype(str),
-        })
-
-        return result_df, counts
+    return result_df, counts
 
 
 # -------------------------------------------------------
