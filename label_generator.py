@@ -344,29 +344,16 @@ def dataframe_from_file(file):
 st.set_page_config(page_title="Labelgenerator", page_icon="📦")
 st.title("📦 Containerlabelgenerator")
 
-tab_csv, tab_manual = st.tabs(["📂 CSV/XLSX uploaden", "✏️ Handmatig invoeren"])
+tab_xlsx, tab_manual = st.tabs(["📂 XLSX uploaden", "✏️ Handmatig invoeren"])
 
+# ── Tab 1: XLSX upload ─────────────────────────────────
+with tab_xlsx:
+    st.write("Upload een XLSX bestand om labels te genereren met barcodes.")
 
-# ── Tab 1: CSV upload ──────────────────────────────────
-with tab_csv:
-    st.write("Upload een CSV of XLSX bestand om labels te genereren met barcodes.")
-
-    st.markdown("#### Vereiste CSV/XLSX headers")
-    voorbeeld_df = pd.DataFrame([{
-        "ContainerCode": "OPK_140L",
-        "StreetName": "Teststraat",
-        "HouseNumber": 9,
-        "HouseLetter": "A",
-        "HouseNumberAddition": "",
-        "ZipCode": "1234AA",
-        "City": "Rijswijk",
-    }])
-    st.dataframe(voorbeeld_df, width="stretch", hide_index=True)
-
-    uploaded_file = st.file_uploader("Sleep je .csv of .xlsx bestand hiernaartoe", type=["csv", "xlsx"])
+    uploaded_file = st.file_uploader("Sleep je .xlsx bestand hiernaartoe", type=["xlsx"])
 
     if uploaded_file:
-        if st.button("Verwerken", key="btn_csv"):
+        if st.button("Verwerken", key="btn_xlsx"):
             with st.spinner("Bezig met verwerken..."):
                 df, counts = dataframe_from_file(uploaded_file)
                 docx_file = generate_word_from_dataframe(df)
@@ -374,9 +361,9 @@ with tab_csv:
                 st.success(f"✅ {len(df)} label(s) gegenereerd!")
 
                 col1, col2, col3 = st.columns(3)
-                col1.metric("🔄 Wissel",    counts['wissel'],      help="CategoryName = CHANGE")
-                col2.metric("📦 Uitzetten", counts['uitzetten'],   help="CategoryName = NEW of EXTRA")
-                col3.metric("⛔ Overgeslagen", counts['overgeslagen'], help="CategoryName = REMOVE — geen label gegenereerd")
+                col1.metric("🔄 Wissel",       counts['wissel'],      help="CategoryName = CHANGE")
+                col2.metric("📦 Uitzetten",    counts['uitzetten'],   help="CategoryName = NEW of EXTRA")
+                col3.metric("⛔ Overgeslagen", counts['overgeslagen'], help="Ontbrekende/ongeldige velden")
 
                 if counts['overgeslagen_rows']:
                     with st.expander(f"⛔ {counts['overgeslagen']} overgeslagen rij(en) — klik om te bekijken"):
@@ -389,9 +376,8 @@ with tab_csv:
                     data=docx_file,
                     file_name=f"containerlabels_{timestamp}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="dl_csv"
+                    key="dl_xlsx"
                 )
-
 
 # ── Tab 2: Handmatig invoeren ──────────────────────────
 with tab_manual:
