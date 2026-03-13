@@ -11,7 +11,9 @@ from io import BytesIO
 BARCODE_WIDTH     = 3.6
 BARCODE_HEIGHT    = 1.9
 BARCODE_TEXT_SIZE = 18
-MAX_ROWS          = 8
+MAX_ROWS          = 10
+
+XIMMIO_EXPORT_COLUMNS = {'Stad', 'Straat', 'Huisnummer', 'Postcode', 'SubTaskDesc'}
 
 
 # -------------------------------------------------------
@@ -117,96 +119,9 @@ def generate_word_from_dataframe(df):
     return docx_buffer
 
 
-def get_category_counts(df_raw):
-    """Bereken tellingen per categorie en validatiefouten op basis van het originele DataFrame.
-    REMOVE-rijen worden gefilterd voor de telling. Overgeslagen = rijen met ontbrekende/ongeldige velden.
-    """
-    # Filter REMOVE-rijen eerst weg voor de tellingen
-    if 'CATEGORYNAME' in df_raw.columns:
-        cats_all = df_raw['CATEGORYNAME'].astype(str).str.strip().str.upper()
-        df_telling = df_raw[cats_all != 'REMOVE'].copy()
-    else:
-        df_telling = df_raw.copy()
-
-    # Tellingen op gefilterd DataFrame
-    if 'CATEGORYNAME' in df_telling.columns:
-        cats = df_telling['CATEGORYNAME'].astype(str).str.strip().str.upper()
-        wissel    = int((cats == 'CHANGE').sum())
-        uitzetten = int(((cats == 'NEW') | (cats == 'EXTRA')).sum())
-    else:
-        wissel    = 0
-        uitzetten = len(df_telling)
-
-    # Overgeslagen: rijen met ontbrekende/ongeldige velden (op het totale df incl. REMOVE-filter)
-    overgeslagen_rows = []
-    for idx, row in df_telling.iterrows():
-        redenen = []
-        containercode = str(row.get('CONTAINERCODE', '')).strip()
-        streetname    = str(row.get('STREETNAME', '')).strip()
-        zipcode       = str(row.get('ZIPCODE', '')).strip()
-        city          = str(row.get('CITY', '')).strip()
-
-        if len(containercode) < 5:
-            redenen.append(f"ContainerCode te kort of leeg ('{containercode}')")
-        if not streetname:
-            redenen.append("StreetName leeg")
-        if not zipcode:
-            redenen.append("ZipCode leeg")
-        if not city:
-            redenen.append("City leeg")
-
-        if redenen:
-            adres = f"{streetname} {str(row.get('HOUSENUMBER', '')).strip()}".strip()
-            overgeslagen_rows.append({
-                'rij':       idx + 2,
-                'adres':     adres or '—',
-                'postcode':  zipcode or '—',
-                'container': containercode or '—',
-                'reden':     ' · '.join(redenen),
-            })
-
-    return {
-        'wissel':            wissel,
-        'uitzetten':         uitzetten,
-        'overgeslagen':      len(overgeslagen_rows),
-        'overgeslagen_rows': overgeslagen_rows,
-    }
-
-
-XIMMIO_EXPORT_COLUMNS = {'Stad', 'Straat', 'Huisnummer', 'Postcode', 'SubTaskDesc'}
-
-
 def is_ximmio_export(df):
     """Detecteer of het bestand een Ximmio bakwagen export is."""
     return XIMMIO_EXPORT_COLUMNS.issubset(set(df.columns))
-
-
-def parse_subtaskdesc(value):
-    """Extraheer CategoryName en ContainerType uit SubTaskDesc.
-    - CHANGE: containertype staat na '>' tussen ()
-    - NEW/EXTRA: containertype staat tussen () aan het einde
-    - REMOVE: geen containertype nodig
-    Geeft (category, containertype) terug.
-    """
-    s = str(value)
-    m_cat = re.search(r'-\s*(CHANGE|NEW|EXTRA|REMOVE)\b', s, re.IGNORECASE)
-    if not m_cat:
-        return None, None
-    cat = m_cat.group(1).upper()
-
-    if cat == 'CHANGE':
-        # Pak de laatste (...), dan daarin alles na de laatste >
-        m_paren = re.search(r'\(([^(]+)\)\s*$', s)
-        inner = m_paren.group(1) if m_paren else s
-        m_arrow = re.search(r'>\s*(\S+)\s*$', inner)
-        container = m_arrow.group(1).strip() if m_arrow else None
-    elif cat in ('NEW', 'EXTRA'):
-        m = re.search(r'\(([^)]+)\)\s*$', s)
-        container = m.group(1).strip() if m else None
-    else:
-        container = None
-
-    return cat, container
 
 
 def dataframe_from_ximmio_export(df, skip_indices=None):
@@ -335,35 +250,95 @@ def dataframe_from_file(file):
         return result_df, counts
 
     else:
-        # ── Standaard Ximmio CSV/XLSX export ───────────────────
+        # ── Standaard formaat (Nederlands of Engels) ───────────
         df = df_raw.copy()
-        df.columns = df.columns.str.upper()
 
-        counts = get_category_counts(df)
+        # Detecteer Nederlands formaat op basis van kolomnamen
+        cols = set(df.columns.str.strip())
+        is_nl = 'ContainerCode' in cols and 'Straat' in cols and 'Postcode' in cols
 
-        # Sorteer oplopend op ZipCode, HouseNumber, HouseLetter, HouseNumberAddition
-        sort_cols = []
-        for col in ['ZIPCODE', 'HOUSENUMBER', 'HOUSELETTER', 'HOUSENUMBERADDITION']:
-            if col in df.columns:
-                sort_cols.append(col)
-        if sort_cols:
-            df['HOUSENUMBER'] = pd.to_numeric(df['HOUSENUMBER'], errors='coerce').fillna(0).astype(int)
-            df = df.sort_values(by=sort_cols, ascending=True, na_position='last').reset_index(drop=True)
+        def safe_col(df, col):
+            """Geeft een lege Series als kolom niet bestaat."""
+            return df[col].fillna('').astype(str).str.strip() if col in df.columns else pd.Series([''] * len(df))
 
-        if 'CATEGORYNAME' in df.columns:
-            df = df[df['CATEGORYNAME'].astype(str).str.strip().str.upper() != 'REMOVE']
+        def leeg_std(val):
+            if val is None: return True
+            if isinstance(val, float) and pd.isna(val): return True
+            return str(val).strip().lower() in ('', 'nan', 'none')
 
-        houseletter          = df['HOUSELETTER'].fillna('').astype(str).str.strip()
-        housenumber_addition = df['HOUSENUMBERADDITION'].fillna('').astype(str).str.strip()
+        if is_nl:
+            # ── Nederlands kolomformaat ──────────────────────────
+            REQUIRED_NL = ['ContainerCode', 'Straat', 'Postcode', 'Huisnummer', 'Woonplaats']
 
-        result_df = pd.DataFrame({
-            'containertype': df['CONTAINERCODE'].apply(strip_spaces),
-            'straat':        df['STREETNAME'].astype(str),
-            'huisnummer':    df['HOUSENUMBER'].astype(str),
-            'toevoeging':    (houseletter + housenumber_addition).str.strip(),
-            'postcode':      df['ZIPCODE'].apply(strip_spaces),
-            'woonplaats':    df['CITY'].astype(str),
-        })
+            # Validatie: overgeslagen rijen
+            overgeslagen_rows = []
+            skip_idx = set()
+            for idx, row in df.iterrows():
+                redenen = []
+                containercode = strip_spaces(str(row.get('ContainerCode', '') or ''))
+                straat_v   = row.get('Straat', '')
+                postcode_v = row.get('Postcode', '')
+                hn_v       = row.get('Huisnummer', '')
+                woon_v     = row.get('Woonplaats', '')
+                straat_s   = '' if leeg_std(straat_v)   else str(straat_v).strip()
+                postcode_s = '' if leeg_std(postcode_v) else strip_spaces(str(postcode_v))
+                hn_s       = '' if leeg_std(hn_v)       else str(hn_v).strip()
+                woon_s     = '' if leeg_std(woon_v)     else str(woon_v).strip()
+                if len(containercode) < 5:
+                    redenen.append(f"ContainerCode te kort of leeg ('{containercode}')")
+                if not straat_s:
+                    redenen.append("Straat leeg")
+                if not postcode_s:
+                    redenen.append("Postcode leeg")
+                if not hn_s:
+                    redenen.append("Huisnummer leeg")
+                if not woon_s:
+                    redenen.append("Woonplaats leeg")
+                if redenen:
+                    skip_idx.add(idx)
+                    overgeslagen_rows.append({
+                        'rij':       idx + 2,
+                        'adres':     f"{straat_s} {hn_s}".strip() or '—',
+                        'postcode':  postcode_s or '—',
+                        'container': containercode or '—',
+                        'reden':     ' · '.join(redenen),
+                    })
+
+            counts = {
+                'wissel':            0,
+                'uitzetten':         len(df) - len(skip_idx),
+                'overgeslagen':      len(overgeslagen_rows),
+                'overgeslagen_rows': overgeslagen_rows,
+            }
+
+            # Sorteer oplopend
+            df['_hn_int'] = pd.to_numeric(df.get('Huisnummer'), errors='coerce').fillna(0).astype(int)
+            df = df.sort_values(
+                by=['Postcode', '_hn_int', 'Huisletter', 'Huisnummertoevoeging'],
+                ascending=True, na_position='last'
+            ).reset_index(drop=True)
+
+            result_df = pd.DataFrame([
+                {
+                    'containertype': strip_spaces(str(row.get('ContainerCode', '') or '')),
+                    'straat':        str(row.get('Straat', '') or '').strip(),
+                    'huisnummer':    str(row.get('Huisnummer', '') or '').strip(),
+                    'toevoeging':    (
+                        ('' if leeg_std(row.get('Huisletter')) else str(row['Huisletter']).strip()) +
+                        ('' if leeg_std(row.get('Huisnummertoevoeging')) else str(row['Huisnummertoevoeging']).strip())
+                    ).strip(),
+                    'postcode':      strip_spaces(str(row.get('Postcode', '') or '')),
+                    'woonplaats':    str(row.get('Woonplaats', '') or '').strip(),
+                }
+                for idx, row in df.iterrows() if idx not in skip_idx
+            ])
+
+        else:
+            raise ValueError(
+                "Onbekend bestandsformaat. Het bestand moet de Ximmio bakwagen kolommen bevatten "
+                "(Stad, Straat, Huisnummer, Postcode, SubTaskDesc) of het Nederlandse standaardformaat "
+                "(ContainerCode, Straat, Postcode, Huisnummer, Woonplaats)."
+            )
 
         return result_df, counts
 
