@@ -209,15 +209,22 @@ def parse_subtaskdesc(value):
     return cat, container
 
 
-def dataframe_from_ximmio_export(df):
-    """Map Ximmio bakwagen export naar intern DataFrame formaat."""
+def dataframe_from_ximmio_export(df, skip_indices=None):
+    """Map Ximmio bakwagen export naar intern DataFrame formaat.
+    skip_indices: set van DataFrame-indices die overgeslagen moeten worden (validatiefouten).
+    """
+    if skip_indices is None:
+        skip_indices = set()
     rows = []
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         subtask = str(row.get('SubTaskDesc', ''))
         cat, container = parse_subtaskdesc(subtask)
 
         if cat == 'REMOVE':
             continue  # Overslaan
+
+        if idx in skip_indices:
+            continue  # Overslaan vanwege validatiefouten
 
         hl_raw     = row.get('Huisletter', '')
         tv_raw     = row.get('Huisnummer toevoeging', '')
@@ -255,6 +262,7 @@ def dataframe_from_file(file):
         cats_series = df_raw['SubTaskDesc'].apply(lambda v: parse_subtaskdesc(v)[0])
         cats_upper  = cats_series.fillna('').str.upper()
         overgeslagen_rows = []
+        skip_indices = set()
         for idx, row in df_raw.iterrows():
             cat, container = parse_subtaskdesc(str(row.get('SubTaskDesc', '')))
             if cat == 'REMOVE':
@@ -295,6 +303,7 @@ def dataframe_from_file(file):
             if not subtask_s:
                 redenen.append("SubTaskDesc leeg")
             if redenen:
+                skip_indices.add(idx)
                 huisnummer = str(row.get('Huisnummer', '')).strip()
                 overgeslagen_rows.append({
                     'rij':       idx + 2,
@@ -311,7 +320,7 @@ def dataframe_from_file(file):
             'overgeslagen_rows': overgeslagen_rows,
         }
 
-        result_df = dataframe_from_ximmio_export(df_raw)
+        result_df = dataframe_from_ximmio_export(df_raw, skip_indices=skip_indices)
 
         # Sorteer oplopend
         if not result_df.empty:
