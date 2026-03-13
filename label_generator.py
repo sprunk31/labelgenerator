@@ -426,6 +426,8 @@ with tab_manual:
 
     if 'num_rows' not in st.session_state:
         st.session_state.num_rows = 1
+    else:
+        st.session_state.num_rows = min(st.session_state.num_rows, MAX_ROWS)
 
     col_add, col_remove = st.columns([1, 1])
     with col_add:
