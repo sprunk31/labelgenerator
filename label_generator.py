@@ -19,6 +19,9 @@ MAX_ROWS          = 10
 
 XIMMIO_EXPORT_COLUMNS = {'Stad', 'Straat', 'Huisnummer', 'Postcode', 'SubTaskDesc'}
 
+# GitHub raw URL voor het Avalex logo
+AVALEX_LOGO_URL = "https://raw.githubusercontent.com/your-org/your-repo/main/Avalexlogo.png"
+
 
 # -------------------------------------------------------
 # Hulpfuncties
@@ -184,7 +187,6 @@ def dataframe_from_ximmio_export(df, skip_indices=None):
         tv_raw     = row.get('Huisnummer toevoeging', '')
         huisletter = '' if pd.isna(hl_raw) else str(hl_raw).strip()
         toevoeging = '' if pd.isna(tv_raw) else str(tv_raw).strip()
-        # Underscore in toevoeging behouden zoals het is (Ximmio gebruikt dit als separator)
 
         rows.append({
             'containertype': strip_spaces(container or ''),
@@ -212,7 +214,6 @@ def dataframe_from_file(file):
 
     if is_ximmio_export(df_raw):
         # ── Ximmio bakwagen export ──────────────────────────────
-        # Tellingen uit SubTaskDesc voor de rapportage
         cats_series = df_raw['SubTaskDesc'].apply(lambda v: parse_subtaskdesc(v)[0])
         cats_upper  = cats_series.fillna('').str.upper()
         overgeslagen_rows = []
@@ -222,7 +223,6 @@ def dataframe_from_file(file):
             if cat == 'REMOVE':
                 continue
             def leeg(val):
-                """Geeft True als de waarde leeg, NaN of de string 'nan' is."""
                 import pandas as pd
                 if val is None:
                     return True
@@ -276,7 +276,6 @@ def dataframe_from_file(file):
 
         result_df = dataframe_from_ximmio_export(df_raw, skip_indices=skip_indices)
 
-        # Sorteer oplopend
         if not result_df.empty:
             result_df['_hn_int'] = pd.to_numeric(result_df['_huisnummer_raw'], errors='coerce').fillna(0).astype(int)
             result_df = result_df.sort_values(
@@ -292,12 +291,10 @@ def dataframe_from_file(file):
         # ── Standaard formaat (Nederlands of Engels) ───────────
         df = df_raw.copy()
 
-        # Detecteer Nederlands formaat op basis van kolomnamen
         cols = set(df.columns.str.strip())
         is_nl = 'ContainerCode' in cols and 'Straat' in cols and 'Postcode' in cols
 
         def safe_col(df, col):
-            """Geeft een lege Series als kolom niet bestaat."""
             return df[col].fillna('').astype(str).str.strip() if col in df.columns else pd.Series([''] * len(df))
 
         def leeg_std(val):
@@ -306,10 +303,8 @@ def dataframe_from_file(file):
             return str(val).strip().lower() in ('', 'nan', 'none')
 
         if is_nl:
-            # ── Nederlands kolomformaat ──────────────────────────
             REQUIRED_NL = ['ContainerCode', 'Straat', 'Postcode', 'Huisnummer', 'Woonplaats']
 
-            # Validatie: overgeslagen rijen
             overgeslagen_rows = []
             skip_idx = set()
             for idx, row in df.iterrows():
@@ -350,7 +345,6 @@ def dataframe_from_file(file):
                 'overgeslagen_rows': overgeslagen_rows,
             }
 
-            # Sorteer oplopend
             df['_hn_int'] = pd.to_numeric(df.get('Huisnummer'), errors='coerce').fillna(0).astype(int)
             df = df.sort_values(
                 by=['Postcode', '_hn_int', 'Huisletter', 'Huisnummertoevoeging'],
@@ -390,15 +384,12 @@ ORDERS_PER_PAGE = 4
 
 
 def _make_barcode_image(value):
-    """Genereer een Code128 barcode PNG op natuurlijke resolutie (geen stretch).
-    Geeft (buf, breedte_cm, hoogte_cm) terug zodat add_picture niet vervormt.
-    """
+    """Genereer een Code128 barcode PNG op natuurlijke resolutie (geen stretch)."""
     encoder = Code128Encoder(str(value))
     img = Image.open(BytesIO(encoder.get_imagedata()))
     bbox = img.getbbox()
     if bbox:
         img = img.crop((bbox[0], 0, bbox[2], img.height))
-    # Verwijder tekstregel onderaan
     draw = ImageDraw.Draw(img)
     w, h = img.size
     draw.rectangle([0, h - 30, w, h], fill='white')
@@ -406,7 +397,6 @@ def _make_barcode_image(value):
     buf = BytesIO()
     img.save(buf, format='PNG')
     buf.seek(0)
-    # Schaal naar max 4.8cm breedte, behoud aspect ratio
     w2, h2 = img.size
     natural_w_cm = w2 / 96 * 2.54
     natural_h_cm = h2 / 96 * 2.54
@@ -436,20 +426,226 @@ def _set_cell_border(cell, **kwargs):
     tcPr.append(tcBorders)
 
 
-def _para(text, bold=False, size_pt=10, align=None, color=None):
-    """Maak een Paragraph object."""
-    from docx import Document as _D
-    tmp = _D()
-    p = tmp.add_paragraph()
-    run = p.add_run(text)
+def _make_field_run(paragraph, field_code, font_size_pt=12, bold=False, color=None):
+    """Voeg een Word-veld (PAGE, NUMPAGES etc.) inline toe als run.
+    color: optionele hex-kleurstring, bijv. '888888' voor grijs.
+    """
+    def _new_run_with_rpr():
+        r = OxmlElement('w:r')
+        rpr = OxmlElement('w:rPr')
+        sz = OxmlElement('w:sz')
+        sz.set(qn('w:val'), str(int(font_size_pt * 2)))
+        szCs = OxmlElement('w:szCs')
+        szCs.set(qn('w:val'), str(int(font_size_pt * 2)))
+        fn = OxmlElement('w:rFonts')
+        fn.set(qn('w:ascii'), 'Arial')
+        fn.set(qn('w:hAnsi'), 'Arial')
+        if bold:
+            b = OxmlElement('w:b')
+            rpr.append(b)
+        if color:
+            cl = OxmlElement('w:color')
+            cl.set(qn('w:val'), color)
+            rpr.append(cl)
+        rpr.append(fn)
+        rpr.append(sz)
+        rpr.append(szCs)
+        r.append(rpr)
+        return r
+
+    r1 = _new_run_with_rpr()
+    fc1 = OxmlElement('w:fldChar')
+    fc1.set(qn('w:fldCharType'), 'begin')
+    r1.append(fc1)
+    paragraph._p.append(r1)
+
+    r2 = _new_run_with_rpr()
+    instr = OxmlElement('w:instrText')
+    instr.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+    instr.text = f' {field_code} '
+    r2.append(instr)
+    paragraph._p.append(r2)
+
+    r3 = _new_run_with_rpr()
+    fc3 = OxmlElement('w:fldChar')
+    fc3.set(qn('w:fldCharType'), 'end')
+    r3.append(fc3)
+    paragraph._p.append(r3)
+
+
+def _add_right_tab(paragraph, position_dxa):
+    """Voeg een rechts-uitgelijnde tabstop toe aan een paragraaf."""
+    pPr = paragraph._p.get_or_add_pPr()
+    tabs_el = pPr.find(qn('w:tabs'))
+    if tabs_el is None:
+        tabs_el = OxmlElement('w:tabs')
+        pPr.append(tabs_el)
+    tab = OxmlElement('w:tab')
+    tab.set(qn('w:val'), 'right')
+    tab.set(qn('w:pos'), str(position_dxa))
+    tabs_el.append(tab)
+
+
+def _hdr_run(paragraph, text, bold=False, size_pt=12, color=None):
+    """Voeg een opgemaakte run toe aan een paragraaf.
+    color: tuple (R,G,B) of None.
+    """
+    run = paragraph.add_run(text)
     run.bold = bold
     run.font.size = Pt(size_pt)
     run.font.name = 'Arial'
     if color:
         run.font.color.rgb = RGBColor(*color)
-    if align:
-        p.alignment = align
-    return p
+    return run
+
+
+def _add_tab_run(paragraph, size_pt=12):
+    """Voeg een tab-run toe aan een paragraaf."""
+    run = paragraph.add_run()
+    run.font.name = 'Arial'
+    run.font.size = Pt(size_pt)
+    tab_el = OxmlElement('w:tab')
+    run._r.append(tab_el)
+    return run
+
+
+def _add_bottom_border_para(paragraph, color='2E75B6', sz=6):
+    """Voeg een blauwe lijn toe onder een paragraaf."""
+    pPr = paragraph._p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    bottom = OxmlElement('w:bottom')
+    bottom.set(qn('w:val'),   'single')
+    bottom.set(qn('w:sz'),    str(sz))
+    bottom.set(qn('w:color'), color)
+    bottom.set(qn('w:space'), '1')
+    pBdr.append(bottom)
+    pPr.append(pBdr)
+
+
+def _fetch_logo_bytes():
+    """Laad het Avalex-logo. Probeert eerst lokaal (naast app.py), dan via URL.
+    Geeft een verse BytesIO terug of None als het niet lukt.
+    """
+    import os
+
+    # 1. Probeer lokaal bestand (zelfde map als het script)
+    local_paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Avalexlogo.png'),
+        'Avalexlogo.png',
+    ]
+    for path in local_paths:
+        if os.path.isfile(path):
+            try:
+                with open(path, 'rb') as f:
+                    data = f.read()
+                buf = BytesIO(data)
+                Image.open(buf)   # valideer
+                buf.seek(0)
+                return buf
+            except Exception:
+                pass
+
+    # 2. Probeer via URL als fallback
+    if AVALEX_LOGO_URL and 'your-org' not in AVALEX_LOGO_URL:
+        try:
+            import urllib.request
+            with urllib.request.urlopen(AVALEX_LOGO_URL, timeout=5) as resp:
+                data = resp.read()
+            buf = BytesIO(data)
+            Image.open(buf)   # valideer
+            buf.seek(0)
+            return buf
+        except Exception:
+            pass
+
+    return None
+
+
+def _add_header(section, meta, content_width_dxa):
+    """
+    Bouw de paginaheader op met twee regels:
+
+    Regel 1 (rechts uitgelijnd, klein grijs):
+        Pagina X/Y
+
+    Regel 2 (links → center tab → rechts tab):
+        Datum: <waarde>  [CENTER TAB]  Wagen: X   Kenteken: X   Bestuurder: X  [RIGHT TAB]  Route: <waarde>
+
+    + blauwe scheidingslijn onder regel 2.
+    """
+    header = section.header
+    for p in header.paragraphs:
+        p.clear()
+
+    center_tab_dxa = content_width_dxa // 2
+
+    # ── Regel 1: Pagina X/Y rechtsboven (klein, grijs) ────────
+    p1 = header.paragraphs[0]
+    p1.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    _hdr_run(p1, 'Pagina ', bold=True, size_pt=10, color=(0x88, 0x88, 0x88))
+    _make_field_run(p1, 'PAGE',     font_size_pt=10, color='888888')
+    _hdr_run(p1, '/', size_pt=10, color=(0x88, 0x88, 0x88))
+    _make_field_run(p1, 'NUMPAGES', font_size_pt=10, color='888888')
+    p1.paragraph_format.space_before = Pt(0)
+    p1.paragraph_format.space_after  = Pt(8)
+
+    # ── Regel 2: Datum links | center tab | Wagen/Kenteken/Bestuurder | right tab | Route ──
+    p2 = header.add_paragraph()
+    p2.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    # Center tab voor de middelste velden
+    pPr = p2._p.get_or_add_pPr()
+    tabs_el = OxmlElement('w:tabs')
+    tab_c = OxmlElement('w:tab')
+    tab_c.set(qn('w:val'), 'center')
+    tab_c.set(qn('w:pos'), str(center_tab_dxa))
+    tabs_el.append(tab_c)
+    tab_r = OxmlElement('w:tab')
+    tab_r.set(qn('w:val'), 'right')
+    tab_r.set(qn('w:pos'), str(content_width_dxa))
+    tabs_el.append(tab_r)
+    pPr.append(tabs_el)
+
+    _hdr_run(p2, 'Datum: ', bold=True)
+    _hdr_run(p2, meta.get('taakdatum', ''))
+    _add_tab_run(p2)   # → center tab
+    _hdr_run(p2, 'Wagen: ', bold=True)
+    _hdr_run(p2, meta.get('wagen', '') + '   ')
+    _hdr_run(p2, 'Kenteken: ', bold=True)
+    _hdr_run(p2, meta.get('voertuig', '') + '   ')
+    _hdr_run(p2, 'Bestuurder: ', bold=True)
+    _hdr_run(p2, meta.get('naambestuurder', ''))
+    _add_tab_run(p2)   # → right tab
+    _hdr_run(p2, 'Route: ', bold=True)
+    _hdr_run(p2, meta.get('route', ''))
+
+    p2.paragraph_format.space_before = Pt(0)
+    p2.paragraph_format.space_after  = Pt(2)
+
+    # Blauwe lijn onder regel 2
+    _add_bottom_border_para(p2)
+
+
+def _add_footer(section, logo_buf):
+    """
+    Voeg een footer toe met het Avalex-logo gecentreerd onderaan de pagina.
+    logo_buf: BytesIO met PNG-data, of None (dan wordt de footer weggelaten).
+    """
+    if logo_buf is None:
+        return
+
+    footer = section.footer
+    for p in footer.paragraphs:
+        p.clear()
+
+    p = footer.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after  = Pt(0)
+
+    run = p.add_run()
+    logo_buf.seek(0)
+    # Logo hoogte: 1.2 cm, breedte proportioneel
+    run.add_picture(logo_buf, height=Cm(1.2))
 
 
 def generate_routelijst(df_raw, meta):
@@ -461,65 +657,36 @@ def generate_routelijst(df_raw, meta):
         'wagen':          str,
         'voertuig':       str,
         'naambestuurder': str,
-        'route':          str,   # uit TaskDesc
+        'route':          str,
     }
     """
     doc = Document()
 
-    # ── Pagina-instellingen: landscape A4 ──────────────────
+    # ── Pagina-instellingen: landscape A4 ──────────────────────
     section = doc.sections[0]
     section.page_width    = Cm(29.7)
     section.page_height   = Cm(21.0)
     section.left_margin   = Cm(1.5)
     section.right_margin  = Cm(1.5)
-    section.top_margin    = Cm(3.8)   # ruimte voor header
-    section.bottom_margin = Cm(1.5)
+    section.top_margin    = Cm(3.8)
+    section.bottom_margin = Cm(2.0)   # iets meer ruimte voor footer
 
-    # ── Paginaheader ───────────────────────────────────────
-    def _add_header(section, meta):
-        header = section.header
-        # Verwijder bestaande paragrafen
-        for p in header.paragraphs:
-            p.clear()
+    # Contentbreedte in DXA: (29.7 - 1.5 - 1.5) * 567 ≈ 15138
+    CONTENT_WIDTH_DXA = int((29.7 - 1.5 - 1.5) * 567)
 
-        hdr_p = header.paragraphs[0]
-        hdr_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    # Logo ophalen (één keer, hergebruiken voor alle pagina's)
+    logo_buf = _fetch_logo_bytes()
 
-        def _add_field(label, value, sep='   '):
-            run_label = hdr_p.add_run(f"{label}: ")
-            run_label.bold = True
-            run_label.font.size = Pt(12)
-            run_label.font.name = 'Arial'
-            run_val = hdr_p.add_run(f"{value}{sep}")
-            run_val.font.size = Pt(12)
-            run_val.font.name = 'Arial'
+    # ── Header en footer instellen ──────────────────────────────
+    _add_header(section, meta, CONTENT_WIDTH_DXA)
+    _add_footer(section, logo_buf)
 
-        _add_field("Datum",       meta.get('taakdatum', ''))
-        _add_field("Wagen",       meta.get('wagen', ''))
-        _add_field("Kenteken",    meta.get('voertuig', ''))
-        _add_field("Bestuurder",  meta.get('naambestuurder', ''))
-        _add_field("Route",       meta.get('route', ''), sep='')
-
-        # Scheidingslijn onder header
-        pPr = hdr_p._p.get_or_add_pPr()
-        pBdr = OxmlElement('w:pBdr')
-        bottom = OxmlElement('w:bottom')
-        bottom.set(qn('w:val'),   'single')
-        bottom.set(qn('w:sz'),    '6')
-        bottom.set(qn('w:color'), '2E75B6')
-        bottom.set(qn('w:space'), '1')
-        pBdr.append(bottom)
-        pPr.append(pBdr)
-
-    _add_header(section, meta)
-
-    # ── Orders verwerken ───────────────────────────────────
+    # ── Orders verwerken ────────────────────────────────────────
     rows_data = []
     for _, row in df_raw.iterrows():
         subtask_raw = str(row.get('SubTaskDesc', '') or '')
         cat, container = parse_subtaskdesc(subtask_raw)
 
-        # Adres opbouwen
         straat   = str(row.get('Straat', '') or '').strip()
         hn       = str(row.get('Huisnummer', '') or '').strip()
         hl_raw   = row.get('Huisletter', '')
@@ -532,7 +699,6 @@ def generate_routelijst(df_raw, meta):
         adres_r1 = f"{straat} {hn} {hl}{tv}".strip()
         adres_r2 = f"{postcode}  {stad}"
 
-        # Barcode-waarde: SubtaakID
         subtaak_id  = row.get('SubtaakID', '')
         barcode_val = str(int(subtaak_id)) if pd.notna(subtaak_id) and str(subtaak_id).strip() not in ('', 'nan') else subtask_raw[:20]
 
@@ -549,14 +715,9 @@ def generate_routelijst(df_raw, meta):
             '_tv':          tv,
         })
 
-    # ── Paginering: 5 orders per pagina ───────────────────
-    # Elke pagina = één tabel met 5 rijen × 3 kolommen
-    # Kolom 0: adres + barcode  |  Kolom 1: SubTaskDesc + opmerkingen  |  Kolom 2: containersticker
-    # Breedte landscape content: 29.7 - 1.5 - 1.5 = 26.7 cm → in DXA: 26.7 * 567 ≈ 15136
-    # Kolommen: 7cm | 12cm | 7cm  (totaal 26cm, kleine afronding)
     rows_data.sort(key=lambda r: (r['_postcode'], r['_hn_int'], r['_hl'], r['_tv']))
+
     COL_W = [Cm(5.5), Cm(11.0), Cm(10.2)]
-    COL_W_DXA = [3119, 6237, 5781]  # 1 cm = 567 DXA
 
     def _blank_cell_run(cell, text, bold=False, size=9, align=WD_ALIGN_PARAGRAPH.LEFT):
         p = cell.paragraphs[0]
@@ -578,21 +739,17 @@ def generate_routelijst(df_raw, meta):
         p.paragraph_format.space_after  = Pt(2)
         return p
 
-    border_single = {'val': 'single', 'sz': 6, 'color': '000000'}
-    border_none   = {'val': 'none',   'sz': 0, 'color': 'FFFFFF'}
-
     pages = [rows_data[i:i+ORDERS_PER_PAGE] for i in range(0, max(len(rows_data), 1), ORDERS_PER_PAGE)]
 
     for page_idx, page_orders in enumerate(pages):
         if page_idx > 0:
             doc.add_page_break()
 
-        # Één tabel per pagina: 1 header-rij + data-rijen
         tbl = doc.add_table(rows=1 + len(page_orders), cols=3)
         tbl.style = 'Table Grid'
         tbl.autofit = False
 
-        # ── Koptekstrij ──────────────────────────────────
+        # ── Koptekstrij ────────────────────────────────────────
         hdr_row = tbl.rows[0]
         for ci, cell in enumerate(hdr_row.cells):
             cell.width = COL_W[ci]
@@ -616,14 +773,12 @@ def generate_routelijst(df_raw, meta):
             for ci, cell in enumerate(row.cells):
                 cell.width = COL_W[ci]
                 cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER if ci in (0, 2) else WD_ALIGN_VERTICAL.TOP
-                # Verwijder standaard lege paragraaf
                 for p in cell.paragraphs:
                     p.paragraph_format.space_before = Pt(0)
                     p.paragraph_format.space_after  = Pt(0)
 
-            # ── Cel 0: barcode + adres ─────────────────────
+            # ── Cel 0: barcode + adres ──────────────────────────
             c0 = row.cells[0]
-            # Barcode
             try:
                 bc_buf, bc_w, bc_h = _make_barcode_image(order['barcode_val'])
                 p_bc = c0.paragraphs[0]
@@ -635,7 +790,6 @@ def generate_routelijst(df_raw, meta):
             except Exception:
                 _blank_cell_run(c0, order['barcode_val'], bold=True)
 
-            # Barcode waarde onder de barcode
             p_id = c0.add_paragraph()
             p_id.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p_id.paragraph_format.space_before = Pt(0)
@@ -648,7 +802,7 @@ def generate_routelijst(df_raw, meta):
             _add_para(c0, order['adres_r1'], bold=True, size=10, align=WD_ALIGN_PARAGRAPH.CENTER)
             _add_para(c0, order['adres_r2'], size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
 
-            # ── Cel 1: SubTaskDesc + opmerkingen ──────────
+            # ── Cel 1: SubTaskDesc + opmerkingen ───────────────
             c1 = row.cells[1]
             _blank_cell_run(c1, 'Omschrijving:', bold=True, size=8)
             import textwrap as _tw
@@ -657,13 +811,11 @@ def generate_routelijst(df_raw, meta):
             if order['toelichting']:
                 _add_para(c1, f"Toelichting: {order['toelichting']}", size=8)
             _add_para(c1, '')
-            opm_p = _add_para(c1, 'Opmerkingen:', bold=True, size=8)
-            # 3 schrijfregels
+            _add_para(c1, 'Opmerkingen:', bold=True, size=8)
             for _ in range(3):
                 lijn_p = c1.add_paragraph()
                 lijn_p.paragraph_format.space_before = Pt(0)
                 lijn_p.paragraph_format.space_after  = Pt(0)
-                # Lijn via border onderkant paragraaf
                 pPr = lijn_p._p.get_or_add_pPr()
                 pBdr = OxmlElement('w:pBdr')
                 bot = OxmlElement('w:bottom')
@@ -673,9 +825,9 @@ def generate_routelijst(df_raw, meta):
                 bot.set(qn('w:space'), '2')
                 pBdr.append(bot)
                 pPr.append(pBdr)
-                lijn_p.add_run('').font.size = Pt(14)  # Hoogte voor schrijfruimte
+                lijn_p.add_run('').font.size = Pt(14)
 
-            # ── Cel 2: containersticker / innemen ──────────
+            # ── Cel 2: containersticker / innemen ───────────────
             c2 = row.cells[2]
             p_sticker = c2.paragraphs[0]
             p_sticker.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -742,7 +894,6 @@ with tab_xlsx:
                     st.markdown("---")
 
                     if is_ximmio:
-                        # Ximmio: routelijst genereren en beide bestanden als ZIP aanbieden
                         first_row = df_raw_upload.iloc[0]
                         def _s(col):
                             v = first_row.get(col, '')
@@ -761,29 +912,31 @@ with tab_xlsx:
                         )
                         n_pages = -(-n_orders // ORDERS_PER_PAGE)
 
-                        # Bestandsnaam opbouwen: datum_route
                         taakdatum_raw = meta.get('taakdatum', '') or timestamp
                         route_raw     = meta.get('route', '') or 'route'
-                        # Datum normaliseren naar YYYYMMDD
-                        import re as _re
-                        datum_clean = _re.sub(r'[^0-9]', '', str(taakdatum_raw))[:8] or timestamp[:8]
-                        route_clean = _re.sub(r'[^a-zA-Z0-9_]', '_', route_raw).strip('_')
+                        datum_clean = re.sub(r'[^0-9]', '', str(taakdatum_raw))[:8] or timestamp[:8]
+                        route_clean = re.sub(r'[^a-zA-Z0-9_]', '_', route_raw).strip('_')
                         bestand_prefix = f"{datum_clean}_{route_clean}"
 
-                        import zipfile
-                        zip_buf = BytesIO()
-                        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                            zf.writestr(f"{bestand_prefix}_containerlabels.docx", docx_labels.read())
-                            zf.writestr(f"{bestand_prefix}_routelijst.docx",      docx_route.read())
-                        zip_buf.seek(0)
-
-                        st.download_button(
-                            label=f"📥 Download labels + routelijst ({n_orders} orders, {n_pages} pag.)",
-                            data=zip_buf,
-                            file_name=f"{bestand_prefix}_containerdistributie.zip",
-                            mime="application/zip",
-                            key="dl_zip"
-                        )
+                        col_dl1, col_dl2 = st.columns(2)
+                        with col_dl1:
+                            st.download_button(
+                                label="📥 Download containerlabels",
+                                data=docx_labels,
+                                file_name=f"{bestand_prefix}_containerlabels.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                key="dl_labels",
+                                use_container_width=True,
+                            )
+                        with col_dl2:
+                            st.download_button(
+                                label=f"📋 Download routelijst ({n_orders} orders, {n_pages} pag.)",
+                                data=docx_route,
+                                file_name=f"{bestand_prefix}_routelijst.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                key="dl_route",
+                                use_container_width=True,
+                            )
                     else:
                         st.download_button(
                             label="📥 Download containerlabels",
@@ -795,7 +948,9 @@ with tab_xlsx:
                 except ValueError as e:
                     st.error(str(e))
                 except Exception as e:
+                    import traceback
                     st.error(f"Fout bij verwerken: {e}")
+                    st.code(traceback.format_exc(), language="text")
 
 # ── Tab 2: Handmatig invoeren ──────────────────────────
 with tab_manual:
@@ -804,7 +959,6 @@ with tab_manual:
     if 'num_rows' not in st.session_state:
         st.session_state.num_rows = 1
 
-    # Altijd clippen naar geldige range, ook bij stale session state
     st.session_state.num_rows = max(1, min(st.session_state.num_rows, MAX_ROWS))
 
     col_add, col_remove = st.columns([1, 1])
