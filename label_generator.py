@@ -664,8 +664,22 @@ def generate_routelijst(df_raw, meta):
 
     # ── Pagina-instellingen: landscape A4 ──────────────────────
     section = doc.sections[0]
+    # A4 landscape: stel in als portrait A4 + orient=landscape
+    # zodat Word het herkent als standaard A4 en niet als 'Aangepast formaat'
     section.page_width    = Cm(21.0)
     section.page_height   = Cm(29.7)
+    # Landscape-oriëntatie instellen via XML (python-docx heeft geen native API hiervoor)
+    from docx.oxml import OxmlElement as _OxmlElement
+    from docx.oxml.ns import qn as _qn
+    sectPr = section._sectPr
+    pgSz = sectPr.find(_qn('w:pgSz'))
+    if pgSz is None:
+        pgSz = _OxmlElement('w:pgSz')
+        sectPr.insert(0, pgSz)
+    pgSz.set(_qn('w:orient'), 'landscape')
+    # Zet breedte/hoogte ook direct in DXA (1 cm = 567 DXA) voor zekerheid
+    pgSz.set(_qn('w:w'), str(int(29.7 * 567)))   # 16834
+    pgSz.set(_qn('w:h'), str(int(21.0 * 567)))   # 11907
     section.left_margin   = Cm(1.5)
     section.right_margin  = Cm(1.5)
     section.top_margin    = Cm(3.8)
