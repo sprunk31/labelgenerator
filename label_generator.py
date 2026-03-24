@@ -608,10 +608,8 @@ def _add_header(section, meta, content_width_dxa):
     _hdr_run(p2, 'Datum: ', bold=True)
     _hdr_run(p2, meta.get('taakdatum', ''))
     _add_tab_run(p2)   # → center tab
-    _hdr_run(p2, 'Wagen: ', bold=True)
-    _hdr_run(p2, meta.get('wagen', '') + '   ')
-    _hdr_run(p2, 'Kenteken: ', bold=True)
-    _hdr_run(p2, meta.get('voertuig', '') + '   ')
+    _hdr_run(p2, 'Voertuig: ', bold=True)
+    _hdr_run(p2, f"{meta.get('wagen', '')} {meta.get('voertuig', '')}".strip() + '   ')
     _hdr_run(p2, 'Bestuurder: ', bold=True)
     _hdr_run(p2, meta.get('naambestuurder', ''))
     _add_tab_run(p2)   # → right tab
