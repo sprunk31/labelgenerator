@@ -669,7 +669,7 @@ def generate_routelijst(df_raw, meta):
     section.left_margin   = Cm(1.5)
     section.right_margin  = Cm(1.5)
     section.top_margin    = Cm(3.8)
-    section.bottom_margin = Cm(2.0)   # iets meer ruimte voor footer
+    section.bottom_margin = Cm(1.5)
 
     # Contentbreedte in DXA: (29.7 - 1.5 - 1.5) * 567 ≈ 15138
     CONTENT_WIDTH_DXA = int((29.7 - 1.5 - 1.5) * 567)
@@ -806,16 +806,16 @@ def generate_routelijst(df_raw, meta):
             c1 = row.cells[1]
             _blank_cell_run(c1, 'Omschrijving:', bold=True, size=8)
             import textwrap as _tw
-            desc_wrapped = '\n'.join(_tw.wrap(order['subtaskdesc'], width=65))
-            _add_para(c1, desc_wrapped, size=9)
+            # Wrap lange tekst over meerdere losse paragrafen (\n werkt niet in python-docx)
+            for desc_line in _tw.wrap(order['subtaskdesc'], width=65) or ['']:
+                _add_para(c1, desc_line, size=9)
             if order['toelichting']:
                 _add_para(c1, f"Toelichting: {order['toelichting']}", size=8)
-            _add_para(c1, '')
             _add_para(c1, 'Opmerkingen:', bold=True, size=8)
             for _ in range(3):
                 lijn_p = c1.add_paragraph()
                 lijn_p.paragraph_format.space_before = Pt(0)
-                lijn_p.paragraph_format.space_after  = Pt(0)
+                lijn_p.paragraph_format.space_after  = Pt(2)
                 pPr = lijn_p._p.get_or_add_pPr()
                 pBdr = OxmlElement('w:pBdr')
                 bot = OxmlElement('w:bottom')
@@ -825,7 +825,7 @@ def generate_routelijst(df_raw, meta):
                 bot.set(qn('w:space'), '2')
                 pBdr.append(bot)
                 pPr.append(pBdr)
-                lijn_p.add_run('').font.size = Pt(14)
+                lijn_p.add_run('').font.size = Pt(10)
 
             # ── Cel 2: containersticker / innemen ───────────────
             c2 = row.cells[2]
