@@ -664,8 +664,8 @@ def generate_routelijst(df_raw, meta):
 
     # ── Pagina-instellingen: landscape A4 ──────────────────────
     section = doc.sections[0]
-    section.page_width    = Cm(29.7)
-    section.page_height   = Cm(21.0)
+    section.page_width    = Cm(21.0)
+    section.page_height   = Cm(29.7)
     section.left_margin   = Cm(1.5)
     section.right_margin  = Cm(1.5)
     section.top_margin    = Cm(3.8)
